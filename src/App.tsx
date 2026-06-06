@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Lightbulb, Layers, GitCompare, Save, Menu, X, Sparkles } from 'lucide-react';
+import { Lightbulb, Layers, GitCompare, Save, Menu, X, Sparkles, LayoutGrid } from 'lucide-react';
 import { useAppStore } from './store/useAppStore';
 import { ArtworkList } from './components/ArtworkList/ArtworkList';
 import { GalleryPreview } from './components/GalleryPreview/GalleryPreview';
@@ -8,11 +8,13 @@ import { LightingPanel } from './components/LightingPanel/LightingPanel';
 import { MaterialPanel } from './components/MaterialPanel/MaterialPanel';
 import { CompareView } from './components/CompareView/CompareView';
 import { StoragePanel } from './components/StoragePanel/StoragePanel';
+import { SchemeOrchestrator } from './components/SchemeOrchestrator/SchemeOrchestrator';
 import type { AppState } from './types';
 
 type PanelTab = AppState['activePanel'];
 
 const tabs: { id: PanelTab; label: string; icon: React.ReactNode }[] = [
+  { id: 'scheme', label: '方案编排', icon: <LayoutGrid className="w-4 h-4" /> },
   { id: 'lighting', label: '灯光', icon: <Lightbulb className="w-4 h-4" /> },
   { id: 'material', label: '材质', icon: <Layers className="w-4 h-4" /> },
   { id: 'compare', label: '对比', icon: <GitCompare className="w-4 h-4" /> },
@@ -26,6 +28,8 @@ export default function App() {
 
   const renderPanel = () => {
     switch (activePanel) {
+      case 'scheme':
+        return <SchemeOrchestrator />;
       case 'lighting':
         return <LightingPanel />;
       case 'material':
@@ -35,7 +39,7 @@ export default function App() {
       case 'storage':
         return <StoragePanel />;
       default:
-        return <LightingPanel />;
+        return <SchemeOrchestrator />;
     }
   };
 

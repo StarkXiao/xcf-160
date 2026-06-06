@@ -41,6 +41,50 @@ export interface Preset {
   createdAt: number;
 }
 
+export interface WallPosition {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  layer: number;
+}
+
+export interface WallArtwork {
+  id: string;
+  artworkId: string;
+  position: WallPosition;
+  lighting: LightingConfig;
+  material: MaterialConfig;
+}
+
+export type LightingStrategyMode = 'uniform' | 'individual' | 'zone';
+
+export interface LightingStrategy {
+  mode: LightingStrategyMode;
+  globalLighting: LightingConfig;
+  zones: {
+    id: string;
+    name: string;
+    lighting: LightingConfig;
+    artworkIds: string[];
+  }[];
+}
+
+export interface GalleryScheme {
+  id: string;
+  name: string;
+  description?: string;
+  thumbnail?: string;
+  wallArtworks: WallArtwork[];
+  lightingStrategy: LightingStrategy;
+  wallMaterial: WallMaterial;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type SchemePanelTab = 'layout' | 'lighting' | 'snapshots';
+
 export interface AppState {
   artworks: Artwork[];
   selectedArtworkId: string | null;
@@ -48,7 +92,11 @@ export interface AppState {
   material: MaterialConfig;
   presets: Preset[];
   compareList: string[];
-  activePanel: 'lighting' | 'material' | 'compare' | 'storage';
+  activePanel: 'lighting' | 'material' | 'compare' | 'storage' | 'scheme';
+  gallerySchemes: GalleryScheme[];
+  currentSchemeId: string | null;
+  selectedWallArtworkIds: string[];
+  schemePanelTab: SchemePanelTab;
 }
 
 export const LIGHT_TYPE_LABELS: Record<LightType, string> = {
@@ -88,3 +136,30 @@ export const DEFAULT_MATERIAL: MaterialConfig = {
   reflectivity: 0.3,
   roughness: 0.7,
 };
+
+export const DEFAULT_WALL_POSITION: WallPosition = {
+  x: 50,
+  y: 50,
+  width: 20,
+  height: 25,
+  rotation: 0,
+  layer: 0,
+};
+
+export const DEFAULT_LIGHTING_STRATEGY: LightingStrategy = {
+  mode: 'uniform',
+  globalLighting: { ...DEFAULT_LIGHTING },
+  zones: [],
+};
+
+export const LIGHTING_STRATEGY_MODE_LABELS: Record<LightingStrategyMode, string> = {
+  uniform: '统一灯光',
+  individual: '独立灯光',
+  zone: '分区灯光',
+};
+
+export const SCHEME_PANEL_TABS: { id: SchemePanelTab; label: string }[] = [
+  { id: 'layout', label: '挂墙布局' },
+  { id: 'lighting', label: '灯光策略' },
+  { id: 'snapshots', label: '方案快照' },
+];

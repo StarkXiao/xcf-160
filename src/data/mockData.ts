@@ -1,4 +1,10 @@
-import type { Artwork } from '../types';
+import type { Artwork, GalleryScheme } from '../types';
+import {
+  DEFAULT_LIGHTING,
+  DEFAULT_MATERIAL,
+  DEFAULT_LIGHTING_STRATEGY,
+  DEFAULT_WALL_POSITION,
+} from '../types';
 
 export const mockArtworks: Artwork[] = [
   {
@@ -88,5 +94,122 @@ export const mockArtworks: Artwork[] = [
     height: 199,
     medium: '大理石雕塑',
     description: '文艺复兴时期最完美的雕塑之一，展现了人体美的极致。',
+  },
+];
+
+export const mockGallerySchemes: GalleryScheme[] = [
+  {
+    id: 'scheme-1',
+    name: '经典大师展',
+    description: '展示文艺复兴至印象派时期的经典杰作',
+    wallArtworks: [
+      {
+        id: 'wa-1',
+        artworkId: '2',
+        position: { ...DEFAULT_WALL_POSITION, x: 25, y: 50, width: 22, height: 15 },
+        lighting: { ...DEFAULT_LIGHTING, colorTemperature: 3200, intensity: 0.85 },
+        material: { ...DEFAULT_MATERIAL, frameMaterial: 'gold' },
+      },
+      {
+        id: 'wa-2',
+        artworkId: '5',
+        position: { ...DEFAULT_WALL_POSITION, x: 55, y: 35, width: 18, height: 16 },
+        lighting: { ...DEFAULT_LIGHTING, colorTemperature: 3500, intensity: 0.8 },
+        material: { ...DEFAULT_MATERIAL, frameMaterial: 'gold' },
+      },
+      {
+        id: 'wa-3',
+        artworkId: '8',
+        position: { ...DEFAULT_WALL_POSITION, x: 75, y: 60, width: 25, height: 10 },
+        lighting: { ...DEFAULT_LIGHTING, colorTemperature: 4000, intensity: 0.9 },
+        material: { ...DEFAULT_MATERIAL, frameMaterial: 'none' },
+      },
+    ],
+    lightingStrategy: {
+      mode: 'uniform',
+      globalLighting: { ...DEFAULT_LIGHTING, colorTemperature: 3500, intensity: 0.85 },
+      zones: [],
+    },
+    wallMaterial: 'matte',
+    createdAt: Date.now() - 86400000 * 7,
+    updatedAt: Date.now() - 86400000 * 2,
+  },
+  {
+    id: 'scheme-2',
+    name: '现代艺术展',
+    description: '从后印象派到表现主义的现代艺术探索',
+    wallArtworks: [
+      {
+        id: 'wa-4',
+        artworkId: '1',
+        position: { ...DEFAULT_WALL_POSITION, x: 20, y: 50, width: 20, height: 25 },
+        lighting: { ...DEFAULT_LIGHTING, type: 'spotlight', colorTemperature: 5500, intensity: 0.9 },
+        material: { ...DEFAULT_MATERIAL, frameMaterial: 'metal' },
+      },
+      {
+        id: 'wa-5',
+        artworkId: '4',
+        position: { ...DEFAULT_WALL_POSITION, x: 50, y: 50, width: 22, height: 18 },
+        lighting: { ...DEFAULT_LIGHTING, type: 'spotlight', colorTemperature: 4500, intensity: 0.85 },
+        material: { ...DEFAULT_MATERIAL, frameMaterial: 'metal' },
+      },
+      {
+        id: 'wa-6',
+        artworkId: '7',
+        position: { ...DEFAULT_WALL_POSITION, x: 80, y: 50, width: 18, height: 25 },
+        lighting: { ...DEFAULT_LIGHTING, type: 'spotlight', colorTemperature: 5000, intensity: 0.88 },
+        material: { ...DEFAULT_MATERIAL, frameMaterial: 'silver' },
+      },
+    ],
+    lightingStrategy: {
+      mode: 'zone',
+      globalLighting: { ...DEFAULT_LIGHTING },
+      zones: [
+        {
+          id: 'zone-1',
+          name: '后印象派区',
+          lighting: { ...DEFAULT_LIGHTING, colorTemperature: 5500, intensity: 0.9 },
+          artworkIds: ['1'],
+        },
+        {
+          id: 'zone-2',
+          name: '表现主义区',
+          lighting: { ...DEFAULT_LIGHTING, colorTemperature: 4500, intensity: 0.85 },
+          artworkIds: ['4', '7'],
+        },
+      ],
+    },
+    wallMaterial: 'concrete',
+    createdAt: Date.now() - 86400000 * 5,
+    updatedAt: Date.now() - 86400000,
+  },
+  {
+    id: 'scheme-3',
+    name: '印象派花园',
+    description: '莫奈与梵高的自然光影对话',
+    wallArtworks: [
+      {
+        id: 'wa-7',
+        artworkId: '3',
+        position: { ...DEFAULT_WALL_POSITION, x: 30, y: 45, width: 22, height: 23 },
+        lighting: { ...DEFAULT_LIGHTING, type: 'floodlight', colorTemperature: 4200, intensity: 0.75 },
+        material: { ...DEFAULT_MATERIAL, frameMaterial: 'wood' },
+      },
+      {
+        id: 'wa-8',
+        artworkId: '6',
+        position: { ...DEFAULT_WALL_POSITION, x: 65, y: 55, width: 22, height: 17 },
+        lighting: { ...DEFAULT_LIGHTING, type: 'floodlight', colorTemperature: 3800, intensity: 0.8 },
+        material: { ...DEFAULT_MATERIAL, frameMaterial: 'wood' },
+      },
+    ],
+    lightingStrategy: {
+      mode: 'individual',
+      globalLighting: { ...DEFAULT_LIGHTING },
+      zones: [],
+    },
+    wallMaterial: 'satin',
+    createdAt: Date.now() - 86400000 * 3,
+    updatedAt: Date.now() - 3600000,
   },
 ];
