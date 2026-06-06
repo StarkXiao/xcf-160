@@ -50,6 +50,13 @@ import type {
   ConstructionItem,
   FrameMaterialGrade,
   QuotationSummary,
+  VenueCondition,
+  TourAdaptationResult,
+  TourAdaptationConfig,
+  TourAdaptationPanelTab,
+  MountingAdjustment,
+  LightingAdjustment,
+  CompatibilityHint,
 } from '../types';
 import {
   DEFAULT_LIGHTING,
@@ -76,6 +83,9 @@ import {
   LIGHTING_EQUIPMENT,
   CONSTRUCTION_ITEMS,
   DEFAULT_WALL_MATERIAL_PRICES,
+  DEFAULT_TOUR_ADAPTATION_CONFIG,
+  DEFAULT_VENUE_CONDITION,
+  MOCK_VENUE_CONDITIONS,
 } from '../types';
 import type {
   ArtworkGroup,
@@ -130,6 +140,10 @@ import {
   exportMaterialCombo as exportMaterialComboUtil,
   exportThemeCollection as exportThemeCollectionUtil,
 } from '../utils/storage';
+import {
+  performTourAdaptation,
+  applyAdaptationToScheme,
+} from '../utils/tourAdaptation';
 
 interface AppStore extends AppState {
   setSelectedArtwork: (id: string | null) => void;
@@ -313,6 +327,21 @@ interface AppStore extends AppState {
     searchQuery?: string,
     categoryFilter?: string
   ) => Array<{ type: 'lighting' | 'material'; data: LightingTemplate | MaterialCombo }>;
+
+  createVenueCondition: (data: Omit<VenueCondition, 'id' | 'createdAt' | 'updatedAt'>) => VenueCondition;
+  updateVenueCondition: (id: string, updates: Partial<VenueCondition>) => void;
+  deleteVenueCondition: (id: string) => void;
+  selectVenue: (id: string | null) => void;
+  getVenueConditionsByType: (venueType: VenueCondition['venueType']) => VenueCondition[];
+
+  performTourAdaptation: (schemeId: string, venueId: string) => TourAdaptationResult | null;
+  selectTourAdaptation: (id: string | null) => void;
+  applyTourAdaptation: (adaptationId: string) => void;
+  deleteTourAdaptation: (id: string) => void;
+  getTourAdaptationsByScheme: (schemeId: string) => TourAdaptationResult[];
+
+  setTourAdaptationPanelTab: (tab: TourAdaptationPanelTab) => void;
+  setTourAdaptationConfig: (config: Partial<TourAdaptationConfig>) => void;
 }
 
 const getInitialState = (): AppState => {
@@ -392,6 +421,18 @@ const getInitialState = (): AppState => {
     presetMarketTab: 'all',
     presetMarketCategory: 'all',
     presetMarketSort: 'popular',
+    venueConditions: MOCK_VENUE_CONDITIONS.map((v, i) => ({
+      ...v,
+      id: `venue-${i + 1}`,
+      createdAt: Date.now() - 86400000 * (30 - i * 5),
+      updatedAt: Date.now() - 86400000 * (15 - i * 2),
+    })),
+    currentVenueId: 'venue-1',
+    tourAdaptationResults: [],
+    currentTourAdaptationId: null,
+    tourAdaptationConfig: { ...DEFAULT_TOUR_ADAPTATION_CONFIG },
+    tourAdaptationPanelTab: 'venue',
+    isPerformingAdaptation: false,
   };
 };
 
@@ -3472,5 +3513,105 @@ export const useAppStore = create<AppStore>((set, get) => ({
     }
 
     return items;
+  },
+
+  createVenueCondition: (data) => {
+    const newVenue: VenueCondition = {
+      ...data,
+      id: `venue-${Date.now()}`,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    set((state) => ({
+      venueConditions: [...state.venueConditions, newVenue],
+    }));
+    return newVenue;
+  },
+
+  updateVenueCondition: (id, updates) => {
+    set((state) => ({
+      venueConditions: state.venueConditions.map((v) =>
+        v.id === id ? { ...v, ...updates, updatedAt: Date.now() } : v
+      ),
+    }));
+  },
+
+  deleteVenueCondition: (id) => {
+    set((state) => ({
+      venueConditions: state.venueConditions.filter((v) => v.id !== id),
+      currentVenueId: state.currentVenueId === id ? null : state.currentVenueId,
+    }));
+  },
+
+  selectVenue: (id) => {
+    set({ currentVenueId: id });
+  },
+
+  getVenueConditionsByType: (venueType) => {
+    return get().venueConditions.filter((v) => v.venueType === venueType);
+  },
+
+  performTourAdaptation: (schemeId, venueId) => {
+    const { gallerySchemes, venueConditions, artworks, tourAdaptationConfig } = get();
+    const scheme = gallerySchemes.find((s) => s.id === schemeId);
+    const venue = venueConditions.find((v) => v.id === venueId);
+
+    if (!scheme || !venue) {
+      return null;
+    }
+
+    set({ isPerformingAdaptation: true });
+
+    const adaptation = performTourAdaptation(scheme, venue, artworks, tourAdaptationConfig);
+
+    set((state) => ({
+      tourAdaptationResults: [...state.tourAdaptationResults, adaptation],
+      currentTourAdaptationId: adaptation.id,
+      isPerformingAdaptation: false,
+    }));
+
+    return adaptation;
+  },
+
+  selectTourAdaptation: (id) => {
+    set({ currentTourAdaptationId: id });
+  },
+
+  applyTourAdaptation: (adaptationId) => {
+    const { tourAdaptationResults, gallerySchemes, currentSchemeId } = get();
+    const adaptation = tourAdaptationResults.find((a) => a.id === adaptationId);
+    const scheme = gallerySchemes.find((s) => s.id === (adaptation?.schemeId || currentSchemeId));
+
+    if (!adaptation || !scheme) return;
+
+    const updatedScheme = applyAdaptationToScheme(scheme, adaptation);
+
+    set((state) => ({
+      gallerySchemes: state.gallerySchemes.map((s) =>
+        s.id === updatedScheme.id ? updatedScheme : s
+      ),
+    }));
+    saveGallerySchemes(get().gallerySchemes);
+  },
+
+  deleteTourAdaptation: (id) => {
+    set((state) => ({
+      tourAdaptationResults: state.tourAdaptationResults.filter((a) => a.id !== id),
+      currentTourAdaptationId: state.currentTourAdaptationId === id ? null : state.currentTourAdaptationId,
+    }));
+  },
+
+  getTourAdaptationsByScheme: (schemeId) => {
+    return get().tourAdaptationResults.filter((a) => a.schemeId === schemeId);
+  },
+
+  setTourAdaptationPanelTab: (tab) => {
+    set({ tourAdaptationPanelTab: tab });
+  },
+
+  setTourAdaptationConfig: (config) => {
+    set((state) => ({
+      tourAdaptationConfig: { ...state.tourAdaptationConfig, ...config },
+    }));
   },
 }));

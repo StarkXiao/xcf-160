@@ -738,6 +738,13 @@ export interface AppState {
   presetMarketTab: PresetMarketTab;
   presetMarketCategory: PresetMarketCategory;
   presetMarketSort: PresetSortType;
+  venueConditions: VenueCondition[];
+  currentVenueId: string | null;
+  tourAdaptationResults: TourAdaptationResult[];
+  currentTourAdaptationId: string | null;
+  tourAdaptationConfig: TourAdaptationConfig;
+  tourAdaptationPanelTab: TourAdaptationPanelTab;
+  isPerformingAdaptation: boolean;
 }
 
 export const APPROVAL_STATUS_LABELS: Record<ApprovalStatus, string> = {
@@ -852,7 +859,7 @@ export interface ThemeCollection {
   updatedAt: number;
 }
 
-export type ActivePanel = 'lighting' | 'material' | 'compare' | 'storage' | 'scheme' | 'workstation' | 'wallConfig' | 'themeLibrary' | 'lightingTemplates' | 'materialCombos' | 'sceneRecommendations';
+export type ActivePanel = 'lighting' | 'material' | 'compare' | 'storage' | 'scheme' | 'workstation' | 'wallConfig' | 'themeLibrary' | 'lightingTemplates' | 'materialCombos' | 'sceneRecommendations' | 'tourAdaptation';
 
 export type ThemeLibraryTab = 'collections' | 'lighting' | 'materials' | 'scenes' | 'presetMarket';
 
@@ -1491,3 +1498,352 @@ export const CONSTRUCTION_UNIT_LABELS: Record<ConstructionItem['unit'], string> 
   hour: '小时',
   personDay: '人天',
 };
+
+export type VenueType = 'museum' | 'gallery' | 'cultural_center' | 'shopping_mall' | 'outdoor' | 'custom';
+export type WallStructure = 'solid' | 'plasterboard' | 'glass' | 'mobile' | 'brick';
+export type PowerType = 'single_phase' | 'three_phase' | 'solar' | 'generator';
+export type CompatibilityLevel = 'compatible' | 'warning' | 'incompatible' | 'requires_adjustment';
+
+export interface VenueCondition {
+  id: string;
+  name: string;
+  venueType: VenueType;
+  venuePhotoUrl?: string;
+  
+  wallDimensions: WallDimensions;
+  ceilingHeight: number;
+  wallStructure: WallStructure;
+  maxLoadPerSquareMeter: number;
+  
+  ambientLightLevel: number;
+  hasNaturalLight: boolean;
+  naturalLightDirection?: 'north' | 'south' | 'east' | 'west' | 'multiple';
+  hasWindowCoverings: boolean;
+  
+  powerType: PowerType;
+  totalPowerCapacity: number;
+  hasDimmingSystem: boolean;
+  trackLightingAvailable: boolean;
+  trackLength?: number;
+  
+  temperatureRange: [number, number];
+  humidityRange: [number, number];
+  hasClimateControl: boolean;
+  hasUVProtection: boolean;
+  
+  viewingDistanceMin: number;
+  viewingDistanceMax: number;
+  trafficFlow: 'low' | 'medium' | 'high';
+  hasSecuritySystem: boolean;
+  
+  notes?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface MountingAdjustment {
+  wallArtworkId: string;
+  artworkId: string;
+  artworkTitle: string;
+  
+  originalPosition: WallPosition;
+  adjustedPosition: WallPosition;
+  
+  centerLineHeight: number;
+  bottomMargin: number;
+  topMargin: number;
+  
+  spacingToLeft: number;
+  spacingToRight: number;
+  spacingToTop: number;
+  spacingToBottom: number;
+  
+  requiresReinforcement: boolean;
+  reinforcementType?: 'anchor' | 'bracket' | 'stand';
+  estimatedWeight: number;
+  
+  adjustmentReason: string;
+}
+
+export interface LightingAdjustment {
+  wallArtworkId: string;
+  artworkId: string;
+  artworkTitle: string;
+  
+  originalLighting: LightingConfig;
+  adjustedLighting: LightingConfig;
+  
+  recommendedFixtureCount: number;
+  recommendedFixtureType: LightType;
+  mountingHeight: number;
+  horizontalOffset: number;
+  
+  glareRisk: 'low' | 'medium' | 'high';
+  uvExposure: 'low' | 'medium' | 'high';
+  
+  powerConsumption: number;
+  heatOutput: number;
+  
+  adjustmentReason: string;
+}
+
+export interface CompatibilityHint {
+  id: string;
+  level: CompatibilityLevel;
+  category: 'mounting' | 'lighting' | 'power' | 'environment' | 'safety' | 'weight' | 'transport';
+  title: string;
+  description: string;
+  suggestion: string;
+  affectedArtworkIds?: string[];
+  estimatedCostImpact?: number;
+  estimatedTimeImpact?: number;
+}
+
+export interface TourAdaptationResult {
+  id: string;
+  schemeId: string;
+  venueId: string;
+  venueName: string;
+  
+  mountingAdjustments: MountingAdjustment[];
+  lightingAdjustments: LightingAdjustment[];
+  compatibilityHints: CompatibilityHint[];
+  
+  overallCompatibility: CompatibilityLevel;
+  compatibilityScore: number;
+  
+  totalPowerRequired: number;
+  totalWeightEstimate: number;
+  estimatedInstallationTime: number;
+  
+  notes?: string;
+  createdAt: number;
+}
+
+export interface TourAdaptationConfig {
+  standardCenterLineHeight: number;
+  minBottomMargin: number;
+  minTopMargin: number;
+  minSpacingHorizontal: number;
+  minSpacingVertical: number;
+  maxArtworksPerWall: number;
+  maxLoadPerAnchor: number;
+  safetyFactor: number;
+  glareThreshold: number;
+  maxColorTemperatureShift: number;
+}
+
+export const VENUE_TYPE_LABELS: Record<VenueType, string> = {
+  museum: '博物馆',
+  gallery: '画廊',
+  cultural_center: '文化中心',
+  shopping_mall: '商业空间',
+  outdoor: '户外场地',
+  custom: '自定义场地',
+};
+
+export const WALL_STRUCTURE_LABELS: Record<WallStructure, string> = {
+  solid: '实体墙',
+  plasterboard: '石膏板墙',
+  glass: '玻璃墙',
+  mobile: '移动展墙',
+  brick: '砖墙',
+};
+
+export const POWER_TYPE_LABELS: Record<PowerType, string> = {
+  single_phase: '单相电',
+  three_phase: '三相电',
+  solar: '太阳能',
+  generator: '发电机',
+};
+
+export const COMPATIBILITY_LEVEL_LABELS: Record<CompatibilityLevel, string> = {
+  compatible: '完全兼容',
+  warning: '需要注意',
+  requires_adjustment: '需要调整',
+  incompatible: '不兼容',
+};
+
+export const COMPATIBILITY_LEVEL_COLORS: Record<CompatibilityLevel, string> = {
+  compatible: 'text-green-400 bg-green-400/10 border-green-400/30',
+  warning: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30',
+  requires_adjustment: 'text-orange-400 bg-orange-400/10 border-orange-400/30',
+  incompatible: 'text-red-400 bg-red-400/10 border-red-400/30',
+};
+
+export const DEFAULT_TOUR_ADAPTATION_CONFIG: TourAdaptationConfig = {
+  standardCenterLineHeight: 150,
+  minBottomMargin: 80,
+  minTopMargin: 50,
+  minSpacingHorizontal: 30,
+  minSpacingVertical: 30,
+  maxArtworksPerWall: 20,
+  maxLoadPerAnchor: 20,
+  safetyFactor: 1.5,
+  glareThreshold: 0.7,
+  maxColorTemperatureShift: 500,
+};
+
+export const DEFAULT_VENUE_CONDITION: Omit<VenueCondition, 'id' | 'createdAt' | 'updatedAt'> = {
+  name: '',
+  venueType: 'gallery',
+  wallDimensions: { ...DEFAULT_WALL_DIMENSIONS },
+  ceilingHeight: 400,
+  wallStructure: 'solid',
+  maxLoadPerSquareMeter: 50,
+  ambientLightLevel: 200,
+  hasNaturalLight: false,
+  hasWindowCoverings: true,
+  powerType: 'single_phase',
+  totalPowerCapacity: 5000,
+  hasDimmingSystem: true,
+  trackLightingAvailable: true,
+  trackLength: 800,
+  temperatureRange: [18, 25],
+  humidityRange: [40, 60],
+  hasClimateControl: true,
+  hasUVProtection: true,
+  viewingDistanceMin: 100,
+  viewingDistanceMax: 300,
+  trafficFlow: 'medium',
+  hasSecuritySystem: true,
+};
+
+export const MOCK_VENUE_CONDITIONS: Omit<VenueCondition, 'id' | 'createdAt' | 'updatedAt'>[] = [
+  {
+    name: '北京当代美术馆 - 主展厅',
+    venueType: 'museum',
+    wallDimensions: { width: 1200, height: 450, unit: 'cm' },
+    ceilingHeight: 600,
+    wallStructure: 'solid',
+    maxLoadPerSquareMeter: 80,
+    ambientLightLevel: 150,
+    hasNaturalLight: false,
+    hasWindowCoverings: true,
+    powerType: 'three_phase',
+    totalPowerCapacity: 20000,
+    hasDimmingSystem: true,
+    trackLightingAvailable: true,
+    trackLength: 1500,
+    temperatureRange: [20, 24],
+    humidityRange: [45, 55],
+    hasClimateControl: true,
+    hasUVProtection: true,
+    viewingDistanceMin: 150,
+    viewingDistanceMax: 500,
+    trafficFlow: 'high',
+    hasSecuritySystem: true,
+    notes: '专业博物馆级展厅，配备完整的安保和环境控制系统',
+  },
+  {
+    name: '798艺术区画廊空间',
+    venueType: 'gallery',
+    wallDimensions: { width: 800, height: 350, unit: 'cm' },
+    ceilingHeight: 450,
+    wallStructure: 'brick',
+    maxLoadPerSquareMeter: 60,
+    ambientLightLevel: 250,
+    hasNaturalLight: true,
+    naturalLightDirection: 'north',
+    hasWindowCoverings: true,
+    powerType: 'single_phase',
+    totalPowerCapacity: 8000,
+    hasDimmingSystem: true,
+    trackLightingAvailable: true,
+    trackLength: 1000,
+    temperatureRange: [18, 26],
+    humidityRange: [40, 65],
+    hasClimateControl: true,
+    hasUVProtection: true,
+    viewingDistanceMin: 100,
+    viewingDistanceMax: 300,
+    trafficFlow: 'medium',
+    hasSecuritySystem: true,
+    notes: '典型商业画廊空间，北向自然光柔和稳定',
+  },
+  {
+    name: '城市文化中心临展厅',
+    venueType: 'cultural_center',
+    wallDimensions: { width: 1000, height: 400, unit: 'cm' },
+    ceilingHeight: 500,
+    wallStructure: 'plasterboard',
+    maxLoadPerSquareMeter: 30,
+    ambientLightLevel: 300,
+    hasNaturalLight: true,
+    naturalLightDirection: 'multiple',
+    hasWindowCoverings: true,
+    powerType: 'three_phase',
+    totalPowerCapacity: 15000,
+    hasDimmingSystem: false,
+    trackLightingAvailable: false,
+    temperatureRange: [16, 28],
+    humidityRange: [35, 70],
+    hasClimateControl: true,
+    hasUVProtection: false,
+    viewingDistanceMin: 80,
+    viewingDistanceMax: 400,
+    trafficFlow: 'high',
+    hasSecuritySystem: true,
+    notes: '临展厅为轻质隔墙，承重有限，需特别注意挂装安全',
+  },
+  {
+    name: '购物中心艺术长廊',
+    venueType: 'shopping_mall',
+    wallDimensions: { width: 600, height: 300, unit: 'cm' },
+    ceilingHeight: 350,
+    wallStructure: 'plasterboard',
+    maxLoadPerSquareMeter: 20,
+    ambientLightLevel: 500,
+    hasNaturalLight: true,
+    naturalLightDirection: 'south',
+    hasWindowCoverings: false,
+    powerType: 'single_phase',
+    totalPowerCapacity: 5000,
+    hasDimmingSystem: false,
+    trackLightingAvailable: true,
+    trackLength: 600,
+    temperatureRange: [22, 26],
+    humidityRange: [45, 60],
+    hasClimateControl: true,
+    hasUVProtection: false,
+    viewingDistanceMin: 50,
+    viewingDistanceMax: 200,
+    trafficFlow: 'high',
+    hasSecuritySystem: false,
+    notes: '商业空间人流量大，环境光强，需要加强灯光对比度',
+  },
+  {
+    name: '城市公园户外展墙',
+    venueType: 'outdoor',
+    wallDimensions: { width: 1500, height: 300, unit: 'cm' },
+    ceilingHeight: 500,
+    wallStructure: 'mobile',
+    maxLoadPerSquareMeter: 15,
+    ambientLightLevel: 1000,
+    hasNaturalLight: true,
+    naturalLightDirection: 'multiple',
+    hasWindowCoverings: false,
+    powerType: 'generator',
+    totalPowerCapacity: 3000,
+    hasDimmingSystem: false,
+    trackLightingAvailable: false,
+    temperatureRange: [5, 35],
+    humidityRange: [30, 90],
+    hasClimateControl: false,
+    hasUVProtection: false,
+    viewingDistanceMin: 150,
+    viewingDistanceMax: 500,
+    trafficFlow: 'medium',
+    hasSecuritySystem: false,
+    notes: '户外展览需考虑天气因素，建议使用全天候展示材料',
+  },
+];
+
+export type TourAdaptationPanelTab = 'venue' | 'mounting' | 'lighting' | 'compatibility';
+
+export const TOUR_ADAPTATION_PANEL_TABS: { id: TourAdaptationPanelTab; label: string; icon: string }[] = [
+  { id: 'venue', label: '场馆条件', icon: 'Building2' },
+  { id: 'mounting', label: '挂装调整', icon: 'Ruler' },
+  { id: 'lighting', label: '灯光调整', icon: 'Lightbulb' },
+  { id: 'compatibility', label: '兼容提示', icon: 'AlertTriangle' },
+];
