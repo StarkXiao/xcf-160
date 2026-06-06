@@ -247,6 +247,55 @@ export interface CustomerProposal {
   shareExpiresAt?: number;
 }
 
+export interface WallDimensions {
+  width: number;
+  height: number;
+  unit: 'cm' | 'm' | 'ft';
+}
+
+export interface WallColor {
+  baseColor: string;
+  textureEnabled: boolean;
+  textureIntensity: number;
+  gradientEnabled: boolean;
+  gradientColor: string;
+  gradientAngle: number;
+}
+
+export type AmbientLightPreset = 'warm_gallery' | 'cool_museum' | 'natural_daylight' | 'dramatic_evening' | 'soft_ambient' | 'neutral_white';
+
+export interface AmbientLightTemplate {
+  id: string;
+  name: string;
+  preset: AmbientLightPreset;
+  colorTemperature: number;
+  intensity: number;
+  ambientColor: string;
+  description?: string;
+}
+
+export type PreviewAspectRatio = '16:9' | '4:3' | '1:1' | '9:16' | 'custom';
+export type PreviewFitMode = 'contain' | 'cover' | 'fill' | 'fit_width' | 'fit_height';
+
+export interface PreviewAdaptation {
+  aspectRatio: PreviewAspectRatio;
+  customWidth?: number;
+  customHeight?: number;
+  fitMode: PreviewFitMode;
+  padding: number;
+  showGrid: boolean;
+  gridSize: number;
+  showSafeArea: boolean;
+  safeAreaMargin: number;
+}
+
+export interface ExhibitionWallConfig {
+  dimensions: WallDimensions;
+  wallColor: WallColor;
+  ambientLight: AmbientLightTemplate;
+  previewAdaptation: PreviewAdaptation;
+}
+
 export interface AppState {
   artworks: Artwork[];
   selectedArtworkId: string | null;
@@ -254,7 +303,7 @@ export interface AppState {
   material: MaterialConfig;
   presets: Preset[];
   compareList: string[];
-  activePanel: 'lighting' | 'material' | 'compare' | 'storage' | 'scheme' | 'workstation';
+  activePanel: 'lighting' | 'material' | 'compare' | 'storage' | 'scheme' | 'workstation' | 'wallConfig';
   gallerySchemes: GalleryScheme[];
   currentSchemeId: string | null;
   selectedWallArtworkIds: string[];
@@ -273,6 +322,7 @@ export interface AppState {
   workstationTab: WorkstationTab;
   ingestionSearchQuery: string;
   ingestionStatus: IngestionStatus;
+  exhibitionWallConfig: ExhibitionWallConfig;
 }
 
 export const LIGHT_TYPE_LABELS: Record<LightType, string> = {
@@ -509,4 +559,126 @@ export const DEFAULT_INGESTION_FORM: IngestionFormData = {
   description: '',
   tagIds: [],
   imageUrl: '',
+};
+
+export const WALL_UNIT_LABELS: Record<WallDimensions['unit'], string> = {
+  cm: '厘米',
+  m: '米',
+  ft: '英尺',
+};
+
+export const AMBIENT_LIGHT_PRESET_LABELS: Record<AmbientLightPreset, string> = {
+  warm_gallery: '温暖画廊',
+  cool_museum: '冷调博物馆',
+  natural_daylight: '自然日光',
+  dramatic_evening: '戏剧夜景',
+  soft_ambient: '柔和环境',
+  neutral_white: '中性白光',
+};
+
+export const AMBIENT_LIGHT_PRESETS: AmbientLightTemplate[] = [
+  {
+    id: 'preset-warm',
+    name: '温暖画廊',
+    preset: 'warm_gallery',
+    colorTemperature: 3200,
+    intensity: 0.7,
+    ambientColor: '#FFE4B5',
+    description: '传统画廊风格，温暖柔和的光线突出艺术品质感',
+  },
+  {
+    id: 'preset-cool',
+    name: '冷调博物馆',
+    preset: 'cool_museum',
+    colorTemperature: 5500,
+    intensity: 0.6,
+    ambientColor: '#E0F0FF',
+    description: '现代博物馆风格，冷静专业的展示环境',
+  },
+  {
+    id: 'preset-daylight',
+    name: '自然日光',
+    preset: 'natural_daylight',
+    colorTemperature: 6500,
+    intensity: 0.8,
+    ambientColor: '#FFF8E7',
+    description: '模拟自然日光，最真实的色彩还原',
+  },
+  {
+    id: 'preset-dramatic',
+    name: '戏剧夜景',
+    preset: 'dramatic_evening',
+    colorTemperature: 2700,
+    intensity: 0.4,
+    ambientColor: '#FFDAB9',
+    description: '低亮度暖光，营造戏剧性的观赏氛围',
+  },
+  {
+    id: 'preset-soft',
+    name: '柔和环境',
+    preset: 'soft_ambient',
+    colorTemperature: 4000,
+    intensity: 0.5,
+    ambientColor: '#F5F5DC',
+    description: '均匀柔和的环境光，适合长时间观赏',
+  },
+  {
+    id: 'preset-neutral',
+    name: '中性白光',
+    preset: 'neutral_white',
+    colorTemperature: 4500,
+    intensity: 0.65,
+    ambientColor: '#FAFAFA',
+    description: '标准中性白光，准确还原作品本色',
+  },
+];
+
+export const PREVIEW_ASPECT_RATIO_LABELS: Record<PreviewAspectRatio, string> = {
+  '16:9': '16:9 宽屏',
+  '4:3': '4:3 标准',
+  '1:1': '1:1 方形',
+  '9:16': '9:16 竖屏',
+  'custom': '自定义',
+};
+
+export const PREVIEW_FIT_MODE_LABELS: Record<PreviewFitMode, string> = {
+  contain: '等比包含',
+  cover: '等比覆盖',
+  fill: '拉伸填充',
+  fit_width: '适应宽度',
+  fit_height: '适应高度',
+};
+
+export const DEFAULT_WALL_DIMENSIONS: WallDimensions = {
+  width: 800,
+  height: 400,
+  unit: 'cm',
+};
+
+export const DEFAULT_WALL_COLOR: WallColor = {
+  baseColor: '#1a1a1a',
+  textureEnabled: false,
+  textureIntensity: 0.3,
+  gradientEnabled: false,
+  gradientColor: '#2a2a2a',
+  gradientAngle: 180,
+};
+
+export const DEFAULT_AMBIENT_LIGHT: AmbientLightTemplate = AMBIENT_LIGHT_PRESETS[0];
+
+export const DEFAULT_PREVIEW_ADAPTATION: PreviewAdaptation = {
+  aspectRatio: '16:9',
+  fitMode: 'contain',
+  padding: 24,
+  showGrid: false,
+  gridSize: 50,
+  showSafeArea: false,
+  safeAreaMargin: 5,
+};
+
+export const DEFAULT_EXHIBITION_WALL_CONFIG: ExhibitionWallConfig = {
+  dimensions: { ...DEFAULT_WALL_DIMENSIONS },
+  wallColor: { ...DEFAULT_WALL_COLOR },
+  ambientLight: { ...DEFAULT_AMBIENT_LIGHT },
+  previewAdaptation: { ...DEFAULT_PREVIEW_ADAPTATION },
 };

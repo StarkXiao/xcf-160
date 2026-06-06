@@ -1,4 +1,4 @@
-import type { Preset, LightingConfig, MaterialConfig, GalleryScheme, CuratorProject, CustomerProposal } from '../types';
+import type { Preset, LightingConfig, MaterialConfig, GalleryScheme, CuratorProject, CustomerProposal, ExhibitionWallConfig } from '../types';
 
 const PRESETS_KEY = 'artwork_preview_presets';
 const LAST_ARTWORK_KEY = 'artwork_preview_last_artwork';
@@ -11,6 +11,7 @@ const CURATOR_PROJECTS_KEY = 'artwork_preview_curator_projects';
 const CURRENT_PROJECT_KEY = 'artwork_preview_current_project';
 const PROPOSALS_KEY = 'artwork_preview_proposals';
 const CURRENT_PROPOSAL_KEY = 'artwork_preview_current_proposal';
+const EXHIBITION_WALL_CONFIG_KEY = 'artwork_preview_exhibition_wall_config';
 
 export interface ProjectExportData {
   project: CuratorProject;
@@ -374,5 +375,23 @@ export function parseShareData(encoded: string): {
     } catch (err) {
       return null;
     }
+  }
+}
+
+export function saveExhibitionWallConfig(config: ExhibitionWallConfig): void {
+  try {
+    localStorage.setItem(EXHIBITION_WALL_CONFIG_KEY, JSON.stringify(config));
+  } catch (e) {
+    console.error('Failed to save exhibition wall config:', e);
+  }
+}
+
+export function loadExhibitionWallConfig(): ExhibitionWallConfig | null {
+  try {
+    const data = localStorage.getItem(EXHIBITION_WALL_CONFIG_KEY);
+    return data ? JSON.parse(data) : null;
+  } catch (e) {
+    console.error('Failed to load exhibition wall config:', e);
+    return null;
   }
 }

@@ -21,6 +21,11 @@ import type {
   IngestionValidationError,
   WorkstationTab,
   IngestionStatus,
+  ExhibitionWallConfig,
+  WallDimensions,
+  WallColor,
+  AmbientLightTemplate,
+  PreviewAdaptation,
 } from '../types';
 import {
   DEFAULT_LIGHTING,
@@ -37,6 +42,7 @@ import {
   WALL_MATERIAL_LABELS,
   DEFAULT_ARTWORK_TAGS,
   DEFAULT_INGESTION_FORM,
+  DEFAULT_EXHIBITION_WALL_CONFIG,
 } from '../types';
 import type {
   ArtworkGroup,
@@ -77,6 +83,8 @@ import {
   generateShareLink as generateShareLinkUtil,
   generateFullShareLink,
   parseShareData,
+  loadExhibitionWallConfig,
+  saveExhibitionWallConfig,
 } from '../utils/storage';
 
 interface AppStore extends AppState {
@@ -169,6 +177,12 @@ interface AppStore extends AppState {
   getFilteredArtworks: () => Artwork[];
   getArtworksByTagId: (tagId: string) => Artwork[];
   filterArtworks: (query: string) => Artwork[];
+  setWallDimensions: (dimensions: Partial<WallDimensions>) => void;
+  setWallColor: (wallColor: Partial<WallColor>) => void;
+  setAmbientLight: (ambientLight: AmbientLightTemplate) => void;
+  setPreviewAdaptation: (adaptation: Partial<PreviewAdaptation>) => void;
+  resetExhibitionWallConfig: () => void;
+  setExhibitionWallConfig: (config: Partial<ExhibitionWallConfig>) => void;
 }
 
 const getInitialState = (): AppState => {
@@ -183,6 +197,7 @@ const getInitialState = (): AppState => {
   const savedCurrentProjectId = loadCurrentProjectId();
   const savedProposals = loadProposals();
   const savedCurrentProposalId = loadCurrentProposalId();
+  const savedWallConfig = loadExhibitionWallConfig();
 
   const schemes = savedSchemes.length > 0 ? savedSchemes : mockGallerySchemes;
   const projects = savedProjects.length > 0 ? savedProjects : mockCuratorProjects;
@@ -216,6 +231,7 @@ const getInitialState = (): AppState => {
     workstationTab: 'ingestion',
     ingestionSearchQuery: '',
     ingestionStatus: 'draft',
+    exhibitionWallConfig: savedWallConfig || { ...DEFAULT_EXHIBITION_WALL_CONFIG },
   };
 };
 
@@ -2124,6 +2140,67 @@ export const useAppStore = create<AppStore>((set, get) => ({
       const matchesTag = artworkTagNames.some((name) => name.includes(lowerQuery));
 
       return matchesTitle || matchesArtist || matchesMedium || matchesYear || matchesTag;
+    });
+  },
+
+  setWallDimensions: (dimensions) => {
+    set((state) => {
+      const newConfig = {
+        ...state.exhibitionWallConfig,
+        dimensions: { ...state.exhibitionWallConfig.dimensions, ...dimensions },
+      };
+      saveExhibitionWallConfig(newConfig);
+      return { exhibitionWallConfig: newConfig };
+    });
+  },
+
+  setWallColor: (wallColor) => {
+    set((state) => {
+      const newConfig = {
+        ...state.exhibitionWallConfig,
+        wallColor: { ...state.exhibitionWallConfig.wallColor, ...wallColor },
+      };
+      saveExhibitionWallConfig(newConfig);
+      return { exhibitionWallConfig: newConfig };
+    });
+  },
+
+  setAmbientLight: (ambientLight) => {
+    set((state) => {
+      const newConfig = {
+        ...state.exhibitionWallConfig,
+        ambientLight: { ...ambientLight },
+      };
+      saveExhibitionWallConfig(newConfig);
+      return { exhibitionWallConfig: newConfig };
+    });
+  },
+
+  setPreviewAdaptation: (adaptation) => {
+    set((state) => {
+      const newConfig = {
+        ...state.exhibitionWallConfig,
+        previewAdaptation: { ...state.exhibitionWallConfig.previewAdaptation, ...adaptation },
+      };
+      saveExhibitionWallConfig(newConfig);
+      return { exhibitionWallConfig: newConfig };
+    });
+  },
+
+  resetExhibitionWallConfig: () => {
+    const defaultConfig = { ...DEFAULT_EXHIBITION_WALL_CONFIG };
+    set({ exhibitionWallConfig: defaultConfig });
+    saveExhibitionWallConfig(defaultConfig);
+  },
+
+  setExhibitionWallConfig: (config) => {
+    set((state) => {
+      const newConfig = {
+        ...state.exhibitionWallConfig,
+        ...config,
+      };
+      saveExhibitionWallConfig(newConfig);
+      return { exhibitionWallConfig: newConfig };
     });
   },
 }));

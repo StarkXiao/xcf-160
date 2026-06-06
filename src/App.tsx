@@ -15,6 +15,7 @@ import {
   Check,
   FolderOpen,
   Archive,
+  Grid3X3,
 } from 'lucide-react';
 import { useAppStore } from './store/useAppStore';
 import { ArtworkList } from './components/ArtworkList/ArtworkList';
@@ -28,6 +29,7 @@ import { SchemeOrchestrator } from './components/SchemeOrchestrator/SchemeOrches
 import { CuratorHub } from './components/CuratorHub/CuratorHub';
 import { ProposalShareView } from './components/ProposalView/ProposalShareView';
 import { ArtworkIngestionWorkstation } from './components/ArtworkIngestionWorkstation/ArtworkIngestionWorkstation';
+import { ExhibitionWallConfig } from './components/ExhibitionWallConfig/ExhibitionWallConfig';
 import type { AppState, AppMode } from './types';
 import { APP_MODE_LABELS, PROJECT_STATUS_LABELS } from './types';
 
@@ -35,6 +37,7 @@ type PanelTab = AppState['activePanel'];
 
 const tabs: { id: PanelTab; label: string; icon: React.ReactNode }[] = [
   { id: 'scheme', label: '方案编排', icon: <LayoutGrid className="w-4 h-4" /> },
+  { id: 'wallConfig', label: '展墙', icon: <Grid3X3 className="w-4 h-4" /> },
   { id: 'lighting', label: '灯光', icon: <Lightbulb className="w-4 h-4" /> },
   { id: 'material', label: '材质', icon: <Layers className="w-4 h-4" /> },
   { id: 'compare', label: '对比', icon: <GitCompare className="w-4 h-4" /> },
@@ -43,6 +46,7 @@ const tabs: { id: PanelTab; label: string; icon: React.ReactNode }[] = [
 ];
 
 const artworkModeTabs: { id: PanelTab; label: string; icon: React.ReactNode }[] = [
+  { id: 'wallConfig', label: '展墙', icon: <Grid3X3 className="w-4 h-4" /> },
   { id: 'lighting', label: '灯光', icon: <Lightbulb className="w-4 h-4" /> },
   { id: 'material', label: '材质', icon: <Layers className="w-4 h-4" /> },
   { id: 'compare', label: '对比', icon: <GitCompare className="w-4 h-4" /> },
@@ -124,6 +128,8 @@ export default function App() {
     switch (activePanel) {
       case 'scheme':
         return <SchemeOrchestrator />;
+      case 'wallConfig':
+        return <ExhibitionWallConfig />;
       case 'lighting':
         return <LightingPanel />;
       case 'material':
