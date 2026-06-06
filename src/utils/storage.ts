@@ -1,5 +1,6 @@
 import type {
   Preset,
+  PresetGroup,
   LightingConfig,
   MaterialConfig,
   GalleryScheme,
@@ -13,9 +14,11 @@ import type {
 } from '../types';
 
 const PRESETS_KEY = 'artwork_preview_presets';
+const PRESET_GROUPS_KEY = 'artwork_preview_preset_groups';
 const LAST_ARTWORK_KEY = 'artwork_preview_last_artwork';
 const LAST_LIGHTING_KEY = 'artwork_preview_last_lighting';
 const LAST_MATERIAL_KEY = 'artwork_preview_last_material';
+const PRESET_RECENTLY_USED_KEY = 'artwork_preview_preset_recently_used';
 const GALLERY_SCHEMES_KEY = 'artwork_preview_gallery_schemes';
 const CURRENT_SCHEME_KEY = 'artwork_preview_current_scheme';
 const APP_MODE_KEY = 'artwork_preview_app_mode';
@@ -50,6 +53,42 @@ export function loadPresets(): Preset[] {
     return data ? JSON.parse(data) : [];
   } catch (e) {
     console.error('Failed to load presets:', e);
+    return [];
+  }
+}
+
+export function savePresetGroups(groups: PresetGroup[]): void {
+  try {
+    localStorage.setItem(PRESET_GROUPS_KEY, JSON.stringify(groups));
+  } catch (e) {
+    console.error('Failed to save preset groups:', e);
+  }
+}
+
+export function loadPresetGroups(): PresetGroup[] {
+  try {
+    const data = localStorage.getItem(PRESET_GROUPS_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch (e) {
+    console.error('Failed to load preset groups:', e);
+    return [];
+  }
+}
+
+export function saveRecentlyUsedPresetIds(ids: string[]): void {
+  try {
+    localStorage.setItem(PRESET_RECENTLY_USED_KEY, JSON.stringify(ids));
+  } catch (e) {
+    console.error('Failed to save recently used presets:', e);
+  }
+}
+
+export function loadRecentlyUsedPresetIds(): string[] {
+  try {
+    const data = localStorage.getItem(PRESET_RECENTLY_USED_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch (e) {
+    console.error('Failed to load recently used presets:', e);
     return [];
   }
 }

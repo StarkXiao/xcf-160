@@ -64,13 +64,29 @@ export interface MaterialConfig {
   roughness: number;
 }
 
+export interface PresetGroup {
+  id: string;
+  name: string;
+  color: string;
+  description?: string;
+  presetIds: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface Preset {
   id: string;
   name: string;
   artworkId: string;
   lighting: LightingConfig;
   material: MaterialConfig;
+  groupId?: string;
+  keywords: string[];
+  coverImageUrl?: string;
+  useCount: number;
+  lastUsedAt?: number;
   createdAt: number;
+  updatedAt: number;
 }
 
 export interface WallPosition {
@@ -481,6 +497,60 @@ export const TAG_CATEGORIES: { id: string; label: string }[] = [
   { id: 'collection', label: '收藏分类' },
 ];
 
+export const PRESET_GROUP_COLORS: string[] = [
+  '#E91E63',
+  '#9C27B0',
+  '#673AB7',
+  '#3F51B5',
+  '#2196F3',
+  '#00BCD4',
+  '#009688',
+  '#4CAF50',
+  '#8BC34A',
+  '#CDDC39',
+  '#FFC107',
+  '#FF9800',
+  '#FF5722',
+  '#795548',
+  '#607D8B',
+];
+
+export const DEFAULT_PRESET_GROUPS: Omit<PresetGroup, 'id' | 'createdAt' | 'updatedAt'>[] = [
+  {
+    name: '常用方案',
+    color: '#2196F3',
+    description: '日常使用的预设方案',
+    presetIds: [],
+  },
+  {
+    name: '古典风格',
+    color: '#9C27B0',
+    description: '适合古典艺术作品的方案',
+    presetIds: [],
+  },
+  {
+    name: '现代风格',
+    color: '#00BCD4',
+    description: '适合现代艺术作品的方案',
+    presetIds: [],
+  },
+  {
+    name: '摄影作品',
+    color: '#4CAF50',
+    description: '专门为摄影作品设计的方案',
+    presetIds: [],
+  },
+];
+
+export type LocalPresetSortType = 'name' | 'createdAt' | 'lastUsedAt' | 'useCount';
+
+export const LOCAL_PRESET_SORT_TYPES: { id: LocalPresetSortType; label: string }[] = [
+  { id: 'name', label: '名称排序' },
+  { id: 'createdAt', label: '最新创建' },
+  { id: 'lastUsedAt', label: '最近使用' },
+  { id: 'useCount', label: '使用频率' },
+];
+
 export const DEFAULT_ARTWORK_TAGS: ArtworkTag[] = [
   { id: 'tag-1', name: '油画', color: '#E91E63', category: 'medium' },
   { id: 'tag-2', name: '水彩', color: '#2196F3', category: 'medium' },
@@ -696,6 +766,10 @@ export interface AppState {
   lighting: LightingConfig;
   material: MaterialConfig;
   presets: Preset[];
+  presetGroups: PresetGroup[];
+  selectedPresetGroupId: string | null;
+  presetSearchQuery: string;
+  presetSortType: LocalPresetSortType;
   compareList: string[];
   activePanel: ActivePanel;
   gallerySchemes: GalleryScheme[];

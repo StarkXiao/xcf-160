@@ -4,6 +4,7 @@ import type {
   LightingConfig,
   MaterialConfig,
   Preset,
+  PresetGroup,
   AppState,
   GalleryScheme,
   WallArtwork,
@@ -86,7 +87,10 @@ import {
   DEFAULT_TOUR_ADAPTATION_CONFIG,
   DEFAULT_VENUE_CONDITION,
   MOCK_VENUE_CONDITIONS,
+  DEFAULT_PRESET_GROUPS,
+  LOCAL_PRESET_SORT_TYPES,
 } from '../types';
+import type { LocalPresetSortType } from '../types';
 import type {
   ArtworkGroup,
   ProgressStep,
@@ -99,6 +103,10 @@ import { mockArtworks, mockGallerySchemes, mockCuratorProjects, mockLightingTemp
 import {
   loadPresets,
   savePresets,
+  loadPresetGroups,
+  savePresetGroups,
+  loadRecentlyUsedPresetIds,
+  saveRecentlyUsedPresetIds,
   loadLastArtwork,
   saveLastArtwork,
   loadLastLighting,
@@ -317,6 +325,23 @@ interface AppStore extends AppState {
   toggleMaterialComboFavorite: (comboId: string) => void;
   duplicateLightingTemplate: (templateId: string, newName?: string) => LightingTemplate;
   duplicateMaterialCombo: (comboId: string, newName?: string) => MaterialCombo;
+  createPresetGroup: (name: string, color: string, description?: string) => PresetGroup;
+  updatePresetGroup: (id: string, updates: Partial<PresetGroup>) => void;
+  deletePresetGroup: (id: string) => void;
+  addPresetToGroup: (groupId: string, presetId: string) => void;
+  removePresetFromGroup: (groupId: string, presetId: string) => void;
+  setSelectedPresetGroup: (id: string | null) => void;
+  setPresetSearchQuery: (query: string) => void;
+  setPresetSortType: (sort: LocalPresetSortType) => void;
+  updatePreset: (id: string, updates: Partial<Preset>) => void;
+  duplicatePreset: (id: string, newName?: string) => Preset;
+  copyPresetToClipboard: (id: string) => Promise<void>;
+  getFilteredPresets: () => Preset[];
+  getRecentlyUsedPresets: (limit?: number) => Preset[];
+  getPresetsByGroup: (groupId: string | null) => Preset[];
+  setPresetCover: (presetId: string, imageUrl: string) => void;
+  addPresetKeywords: (presetId: string, keywords: string[]) => void;
+  removePresetKeyword: (presetId: string, keyword: string) => void;
   setPresetMarketTab: (tab: PresetMarketTab) => void;
   setPresetMarketCategory: (category: PresetMarketCategory) => void;
   setPresetMarketSort: (sort: PresetSortType) => void;
@@ -361,6 +386,7 @@ const getInitialState = (): AppState => {
   const savedMaterialCombos = loadMaterialCombos();
   const savedSceneRecommendations = loadSceneRecommendations();
   const savedThemeCollections = loadThemeCollections();
+  const savedPresetGroups = loadPresetGroups();
 
   const schemes = savedSchemes.length > 0 ? savedSchemes : mockGallerySchemes;
   const projects = savedProjects.length > 0 ? savedProjects : mockCuratorProjects;
@@ -371,6 +397,21 @@ const getInitialState = (): AppState => {
   const materialCombos = savedMaterialCombos.length > 0 ? savedMaterialCombos : mockMaterialCombos;
   const sceneRecommendations = savedSceneRecommendations.length > 0 ? savedSceneRecommendations : mockSceneRecommendations;
   const themeCollections = savedThemeCollections.length > 0 ? savedThemeCollections : mockThemeCollections;
+  const presetGroups = savedPresetGroups.length > 0
+    ? savedPresetGroups
+    : DEFAULT_PRESET_GROUPS.map((g, i) => ({
+        ...g,
+        id: `preset-group-${i + 1}`,
+        createdAt: Date.now() - 86400000 * (30 - i * 5),
+        updatedAt: Date.now() - 86400000 * (15 - i * 2),
+      }));
+
+  const migratedPresets = savedPresets.map((p) => ({
+    keywords: [],
+    useCount: 0,
+    updatedAt: p.createdAt,
+    ...p,
+  }));
 
   return {
     artworks: mockArtworks,
@@ -378,7 +419,11 @@ const getInitialState = (): AppState => {
     selectedArtworkIds: new Set<string>(),
     lighting: savedLighting || DEFAULT_LIGHTING,
     material: savedMaterial || DEFAULT_MATERIAL,
-    presets: savedPresets,
+    presets: migratedPresets,
+    presetGroups,
+    selectedPresetGroupId: null,
+    presetSearchQuery: '',
+    presetSortType: 'lastUsedAt',
     compareList: [],
     activePanel: 'themeLibrary',
     gallerySchemes: schemes,
@@ -468,29 +513,83 @@ export const useAppStore = create<AppStore>((set, get) => ({
   setActivePanel: (panel) => set({ activePanel: panel }),
 
   savePreset: (name) => {
-    const { selectedArtworkId, lighting, material, presets } = get();
+    const { selectedArtworkId, lighting, material, presets, selectedPresetGroupId, artworks } = get();
     if (!selectedArtworkId) return;
 
+    const artwork = artworks.find((a) => a.id === selectedArtworkId);
+    const now = Date.now();
+
     const newPreset: Preset = {
-      id: Date.now().toString(),
+      id: `preset-${now}`,
       name,
       artworkId: selectedArtworkId,
       lighting: { ...lighting },
       material: { ...material },
-      createdAt: Date.now(),
+      groupId: selectedPresetGroupId || undefined,
+      keywords: [],
+      coverImageUrl: artwork?.imageUrl,
+      useCount: 0,
+      createdAt: now,
+      updatedAt: now,
     };
 
     const newPresets = [...presets, newPreset];
     set({ presets: newPresets });
     savePresets(newPresets);
+
+    if (selectedPresetGroupId) {
+      get().addPresetToGroup(selectedPresetGroupId, newPreset.id);
+    }
   },
 
   deletePreset: (id) => {
-    const { presets, compareList } = get();
+    const { presets, compareList, presetGroups } = get();
     const newPresets = presets.filter((p) => p.id !== id);
     const newCompareList = compareList.filter((pid) => pid !== id);
     set({ presets: newPresets, compareList: newCompareList });
     savePresets(newPresets);
+
+    const newGroups = presetGroups.map((g) => ({
+      ...g,
+      presetIds: g.presetIds.filter((pid) => pid !== id),
+      updatedAt: Date.now(),
+    }));
+    set({ presetGroups: newGroups });
+    savePresetGroups(newGroups);
+
+    const recentIds = loadRecentlyUsedPresetIds().filter((rid) => rid !== id);
+    saveRecentlyUsedPresetIds(recentIds);
+  },
+
+  updatePreset: (id, updates) => {
+    const { presets } = get();
+    const newPresets = presets.map((p) =>
+      p.id === id ? { ...p, ...updates, updatedAt: Date.now() } : p
+    );
+    set({ presets: newPresets });
+    savePresets(newPresets);
+  },
+
+  duplicatePreset: (id, newName) => {
+    const { presets } = get();
+    const preset = presets.find((p) => p.id === id);
+    if (!preset) return preset as Preset;
+
+    const now = Date.now();
+    const duplicated: Preset = {
+      ...preset,
+      id: `preset-${now}`,
+      name: newName || `${preset.name} (副本)`,
+      useCount: 0,
+      createdAt: now,
+      updatedAt: now,
+      lastUsedAt: undefined,
+    };
+
+    const newPresets = [...presets, duplicated];
+    set({ presets: newPresets });
+    savePresets(newPresets);
+    return duplicated;
   },
 
   loadPreset: (preset) => {
@@ -502,6 +601,199 @@ export const useAppStore = create<AppStore>((set, get) => ({
     saveLastArtwork(preset.artworkId);
     saveLastLighting(preset.lighting);
     saveLastMaterial(preset.material);
+
+    const { presets } = get();
+    const now = Date.now();
+    const newPresets = presets.map((p) =>
+      p.id === preset.id
+        ? { ...p, useCount: p.useCount + 1, lastUsedAt: now, updatedAt: now }
+        : p
+    );
+    set({ presets: newPresets });
+    savePresets(newPresets);
+
+    const recentIds = loadRecentlyUsedPresetIds().filter((rid) => rid !== preset.id);
+    recentIds.unshift(preset.id);
+    saveRecentlyUsedPresetIds(recentIds.slice(0, 20));
+  },
+
+  copyPresetToClipboard: async (id) => {
+    const { presets } = get();
+    const preset = presets.find((p) => p.id === id);
+    if (!preset) return;
+
+    const data = JSON.stringify(preset, null, 2);
+    try {
+      await navigator.clipboard.writeText(data);
+    } catch (e) {
+      const textarea = document.createElement('textarea');
+      textarea.value = data;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    }
+  },
+
+  getFilteredPresets: () => {
+    const { presets, presetSearchQuery, presetSortType, selectedPresetGroupId } = get();
+    let filtered = [...presets];
+
+    if (selectedPresetGroupId) {
+      filtered = filtered.filter((p) => p.groupId === selectedPresetGroupId);
+    }
+
+    if (presetSearchQuery.trim()) {
+      const query = presetSearchQuery.toLowerCase();
+      filtered = filtered.filter((p) =>
+        p.name.toLowerCase().includes(query) ||
+        p.keywords.some((k) => k.toLowerCase().includes(query))
+      );
+    }
+
+    filtered.sort((a, b) => {
+      switch (presetSortType) {
+        case 'name':
+          return a.name.localeCompare(b.name);
+        case 'createdAt':
+          return b.createdAt - a.createdAt;
+        case 'useCount':
+          return b.useCount - a.useCount;
+        case 'lastUsedAt':
+        default:
+          return (b.lastUsedAt || b.createdAt) - (a.lastUsedAt || a.createdAt);
+      }
+    });
+
+    return filtered;
+  },
+
+  getRecentlyUsedPresets: (limit = 5) => {
+    const { presets } = get();
+    const recentIds = loadRecentlyUsedPresetIds();
+    return recentIds
+      .map((id) => presets.find((p) => p.id === id))
+      .filter(Boolean)
+      .slice(0, limit) as Preset[];
+  },
+
+  getPresetsByGroup: (groupId) => {
+    const { presets } = get();
+    if (groupId === null) {
+      return presets.filter((p) => !p.groupId);
+    }
+    return presets.filter((p) => p.groupId === groupId);
+  },
+
+  createPresetGroup: (name, color, description) => {
+    const { presetGroups } = get();
+    const now = Date.now();
+    const newGroup: PresetGroup = {
+      id: `preset-group-${now}`,
+      name,
+      color,
+      description,
+      presetIds: [],
+      createdAt: now,
+      updatedAt: now,
+    };
+    const newGroups = [...presetGroups, newGroup];
+    set({ presetGroups: newGroups });
+    savePresetGroups(newGroups);
+    return newGroup;
+  },
+
+  updatePresetGroup: (id, updates) => {
+    const { presetGroups } = get();
+    const newGroups = presetGroups.map((g) =>
+      g.id === id ? { ...g, ...updates, updatedAt: Date.now() } : g
+    );
+    set({ presetGroups: newGroups });
+    savePresetGroups(newGroups);
+  },
+
+  deletePresetGroup: (id) => {
+    const { presetGroups, presets, selectedPresetGroupId } = get();
+    const newGroups = presetGroups.filter((g) => g.id !== id);
+    set({
+      presetGroups: newGroups,
+      selectedPresetGroupId: selectedPresetGroupId === id ? null : selectedPresetGroupId,
+    });
+    savePresetGroups(newGroups);
+
+    const newPresets = presets.map((p) =>
+      p.groupId === id ? { ...p, groupId: undefined, updatedAt: Date.now() } : p
+    );
+    set({ presets: newPresets });
+    savePresets(newPresets);
+  },
+
+  addPresetToGroup: (groupId, presetId) => {
+    const { presetGroups, presets } = get();
+    const now = Date.now();
+
+    const newGroups = presetGroups.map((g) =>
+      g.id === groupId
+        ? {
+            ...g,
+            presetIds: g.presetIds.includes(presetId) ? g.presetIds : [...g.presetIds, presetId],
+            updatedAt: now,
+          }
+        : g
+    );
+    set({ presetGroups: newGroups });
+    savePresetGroups(newGroups);
+
+    const newPresets = presets.map((p) =>
+      p.id === presetId ? { ...p, groupId, updatedAt: now } : p
+    );
+    set({ presets: newPresets });
+    savePresets(newPresets);
+  },
+
+  removePresetFromGroup: (groupId, presetId) => {
+    const { presetGroups, presets } = get();
+    const now = Date.now();
+
+    const newGroups = presetGroups.map((g) =>
+      g.id === groupId
+        ? { ...g, presetIds: g.presetIds.filter((id) => id !== presetId), updatedAt: now }
+        : g
+    );
+    set({ presetGroups: newGroups });
+    savePresetGroups(newGroups);
+
+    const newPresets = presets.map((p) =>
+      p.id === presetId ? { ...p, groupId: undefined, updatedAt: now } : p
+    );
+    set({ presets: newPresets });
+    savePresets(newPresets);
+  },
+
+  setSelectedPresetGroup: (id) => set({ selectedPresetGroupId: id }),
+  setPresetSearchQuery: (query) => set({ presetSearchQuery: query }),
+  setPresetSortType: (sort) => set({ presetSortType: sort }),
+
+  setPresetCover: (presetId, imageUrl) => {
+    get().updatePreset(presetId, { coverImageUrl: imageUrl });
+  },
+
+  addPresetKeywords: (presetId, keywords) => {
+    const { presets } = get();
+    const preset = presets.find((p) => p.id === presetId);
+    if (!preset) return;
+
+    const newKeywords = [...new Set([...preset.keywords, ...keywords])];
+    get().updatePreset(presetId, { keywords: newKeywords });
+  },
+
+  removePresetKeyword: (presetId, keyword) => {
+    const { presets } = get();
+    const preset = presets.find((p) => p.id === presetId);
+    if (!preset) return;
+
+    const newKeywords = preset.keywords.filter((k) => k !== keyword);
+    get().updatePreset(presetId, { keywords: newKeywords });
   },
 
   addToCompare: (presetId) => {
