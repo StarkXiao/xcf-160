@@ -169,7 +169,7 @@ export const ThemeLibrary: React.FC = () => {
     return null;
   };
 
-  const getCollectionStats = (collection: typeof themeCollections[0]) => {
+  const getCollectionAssets = (collection: typeof themeCollections[0]) => {
     const collectionLighting = lightingTemplates.filter((t) =>
       collection.lightingTemplateIds.includes(t.id)
     );
@@ -184,10 +184,14 @@ export const ThemeLibrary: React.FC = () => {
     );
 
     return {
-      artworks: collectionArtworks.length,
-      lighting: collectionLighting.length,
-      materials: collectionMaterials.length,
-      scenes: collectionScenes.length,
+      artworks: collectionArtworks,
+      lighting: collectionLighting,
+      materials: collectionMaterials,
+      scenes: collectionScenes,
+      artworkCount: collectionArtworks.length,
+      lightingCount: collectionLighting.length,
+      materialCount: collectionMaterials.length,
+      sceneCount: collectionScenes.length,
     };
   };
 
@@ -395,7 +399,8 @@ export const ThemeLibrary: React.FC = () => {
               const isSelected = selectedThemeCollectionId === collection.id;
               const isEditing = editingId === collection.id;
               const coverArtwork = getCoverArtwork(collection);
-              const stats = getCollectionStats(collection);
+              const assets = getCollectionAssets(collection);
+              const isActiveCollection = selectedThemeCollectionId === collection.id;
 
               return (
                 <motion.div
@@ -404,7 +409,7 @@ export const ThemeLibrary: React.FC = () => {
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
-                  className={`card ${isSelected ? 'border-gold ring-2 ring-gold/20' : ''}`}
+                  className={`card ${isSelected ? 'border-gold ring-2 ring-gold/20' : ''} ${isActiveCollection ? 'ring-2 ring-gold/50' : ''}`}
                   onClick={() => selectThemeCollection(isSelected ? null : collection.id)}
                 >
                   <div className="p-4">
@@ -556,7 +561,7 @@ export const ThemeLibrary: React.FC = () => {
                         <div className="grid grid-cols-4 gap-2 mb-3">
                           <div className="text-center p-2 bg-white/5 rounded-lg">
                             <div className="text-sm font-display font-bold text-white">
-                              {stats.artworks}
+                              {assets.artworkCount}
                             </div>
                             <div className="text-xs text-white/40">作品</div>
                           </div>
@@ -565,33 +570,36 @@ export const ThemeLibrary: React.FC = () => {
                             style={{ backgroundColor: collection.themeColor + '10' }}
                             onClick={(e) => {
                               e.stopPropagation();
+                              selectThemeCollection(collection.id);
                               setThemeLibraryTab('lighting');
                             }}
                           >
                             <div className="text-sm font-display font-bold" style={{ color: collection.themeColor }}>
-                              {stats.lighting}
+                              {assets.lightingCount}
                             </div>
                             <div className="text-xs text-white/40">灯光</div>
                           </div>
                           <div className="text-center p-2 bg-white/5 rounded-lg cursor-pointer hover:bg-white/10 transition-colors"
                             onClick={(e) => {
                               e.stopPropagation();
+                              selectThemeCollection(collection.id);
                               setThemeLibraryTab('materials');
                             }}
                           >
                             <div className="text-sm font-display font-bold text-white">
-                              {stats.materials}
+                              {assets.materialCount}
                             </div>
                             <div className="text-xs text-white/40">材质</div>
                           </div>
                           <div className="text-center p-2 bg-white/5 rounded-lg cursor-pointer hover:bg-white/10 transition-colors"
                             onClick={(e) => {
                               e.stopPropagation();
+                              selectThemeCollection(collection.id);
                               setThemeLibraryTab('scenes');
                             }}
                           >
                             <div className="text-sm font-display font-bold text-white">
-                              {stats.scenes}
+                              {assets.sceneCount}
                             </div>
                             <div className="text-xs text-white/40">场景</div>
                           </div>
@@ -615,6 +623,99 @@ export const ThemeLibrary: React.FC = () => {
                           </div>
                         )}
 
+                        {isSelected && (
+                          <div className="mb-3 p-3 rounded-lg bg-white/5 border border-gallery-border">
+                            <h5 className="text-xs font-medium text-white/70 mb-2 flex items-center gap-1">
+                              <Layers className="w-3 h-3" />
+                              关联资产详情
+                            </h5>
+                            
+                            {assets.lightingCount > 0 && (
+                              <div className="mb-2">
+                                <div className="text-xs text-gold mb-1">灯光模板 ({assets.lightingCount})</div>
+                                <div className="flex flex-wrap gap-1">
+                                  {assets.lighting.slice(0, 3).map((t) => (
+                                    <span
+                                      key={t.id}
+                                      className="text-xs px-2 py-0.5 bg-gold/10 text-gold rounded cursor-pointer hover:bg-gold/20"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        selectThemeCollection(collection.id);
+                                        setThemeLibraryTab('lighting');
+                                      }}
+                                    >
+                                      {t.name}
+                                    </span>
+                                  ))}
+                                  {assets.lightingCount > 3 && (
+                                    <span className="text-xs px-2 py-0.5 bg-white/5 text-white/40 rounded">
+                                      +{assets.lightingCount - 3}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {assets.materialCount > 0 && (
+                              <div className="mb-2">
+                                <div className="text-xs text-gold mb-1">材质组合 ({assets.materialCount})</div>
+                                <div className="flex flex-wrap gap-1">
+                                  {assets.materials.slice(0, 3).map((m) => (
+                                    <span
+                                      key={m.id}
+                                      className="text-xs px-2 py-0.5 bg-gold/10 text-gold rounded cursor-pointer hover:bg-gold/20"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        selectThemeCollection(collection.id);
+                                        setThemeLibraryTab('materials');
+                                      }}
+                                    >
+                                      {m.name}
+                                    </span>
+                                  ))}
+                                  {assets.materialCount > 3 && (
+                                    <span className="text-xs px-2 py-0.5 bg-white/5 text-white/40 rounded">
+                                      +{assets.materialCount - 3}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {assets.sceneCount > 0 && (
+                              <div>
+                                <div className="text-xs text-gold mb-1">场景推荐 ({assets.sceneCount})</div>
+                                <div className="flex flex-wrap gap-1">
+                                  {assets.scenes.slice(0, 3).map((s) => (
+                                    <span
+                                      key={s.id}
+                                      className="text-xs px-2 py-0.5 bg-gold/10 text-gold rounded cursor-pointer hover:bg-gold/20"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        selectThemeCollection(collection.id);
+                                        setThemeLibraryTab('scenes');
+                                      }}
+                                    >
+                                      {s.name}
+                                    </span>
+                                  ))}
+                                  {assets.sceneCount > 3 && (
+                                    <span className="text-xs px-2 py-0.5 bg-white/5 text-white/40 rounded">
+                                      +{assets.sceneCount - 3}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {assets.lightingCount === 0 && assets.materialCount === 0 && assets.sceneCount === 0 && (
+                              <div className="text-xs text-white/40 text-center py-2">
+                                暂无关联资产，点击下方标签页添加灯光、材质或场景
+                              </div>
+                            )}
+                          </div>
+                        )}
+
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center gap-3 text-xs text-white/40">
                             <span className="flex items-center gap-1">
@@ -626,16 +727,46 @@ export const ThemeLibrary: React.FC = () => {
                               {collection.useCount} 次使用
                             </span>
                           </div>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              applyThemeCollection(collection.id);
-                            }}
-                            className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1"
-                          >
-                            <Play className="w-3 h-3" />
-                            应用馆藏
-                          </button>
+                          <div className="flex gap-2">
+                            {!isActiveCollection ? (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  selectThemeCollection(collection.id);
+                                }}
+                                className="btn-secondary text-xs py-1.5 px-2 flex items-center gap-1"
+                                title="选为当前馆藏，可在子库中添加资产"
+                              >
+                                <Check className="w-3 h-3" />
+                                选为当前
+                              </button>
+                            ) : (
+                              <span className="text-xs px-2 py-1.5 bg-gold/20 text-gold rounded flex items-center gap-1">
+                                <Layers className="w-3 h-3" />
+                                当前馆藏
+                              </span>
+                            )}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const applyItems = [];
+                                if (assets.artworkCount > 0) applyItems.push(`${assets.artworkCount}件作品`);
+                                if (assets.lightingCount > 0) applyItems.push(`${assets.lightingCount}个灯光模板`);
+                                if (assets.materialCount > 0) applyItems.push(`${assets.materialCount}个材质组合`);
+                                if (assets.sceneCount > 0) applyItems.push(`${assets.sceneCount}个场景方案`);
+                                const confirmMsg = applyItems.length > 0 
+                                  ? `应用此馆藏将同时应用：\n${applyItems.join('\n')}\n\n是否继续？`
+                                  : '确定要应用此馆藏吗？';
+                                if (confirm(confirmMsg)) {
+                                  applyThemeCollection(collection.id);
+                                }
+                              }}
+                              className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1"
+                            >
+                              <Play className="w-3 h-3" />
+                              应用馆藏
+                            </button>
+                          </div>
                         </div>
 
                         <div className="grid grid-cols-3 gap-2">

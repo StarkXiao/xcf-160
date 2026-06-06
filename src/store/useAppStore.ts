@@ -252,8 +252,14 @@ interface AppStore extends AppState {
   addArtworksToThemeCollection: (collectionId: string, artworkIds: string[]) => void;
   removeArtworksFromThemeCollection: (collectionId: string, artworkIds: string[]) => void;
   addLightingTemplateToThemeCollection: (collectionId: string, templateId: string) => void;
+  removeLightingTemplateFromThemeCollection: (collectionId: string, templateId: string) => void;
   addMaterialComboToThemeCollection: (collectionId: string, comboId: string) => void;
+  removeMaterialComboFromThemeCollection: (collectionId: string, comboId: string) => void;
   addSceneRecommendationToThemeCollection: (collectionId: string, sceneId: string) => void;
+  removeSceneRecommendationFromThemeCollection: (collectionId: string, sceneId: string) => void;
+  getLightingTemplatesByThemeCollection: (collectionId: string) => LightingTemplate[];
+  getMaterialCombosByThemeCollection: (collectionId: string) => MaterialCombo[];
+  getSceneRecommendationsByThemeCollection: (collectionId: string) => SceneRecommendation[];
   selectThemeCollection: (id: string | null) => void;
   exportThemeCollection: (id: string) => void;
   getFilteredLightingTemplates: (category?: string, query?: string) => LightingTemplate[];
@@ -2746,12 +2752,48 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   applyThemeCollection: (id) => {
-    const { themeCollections, lightingTemplates, materialCombos, updateThemeCollection } = get();
+    const {
+      themeCollections,
+      lightingTemplates,
+      materialCombos,
+      sceneRecommendations,
+      updateThemeCollection,
+      applyLightingTemplate,
+      applyMaterialCombo,
+      applySceneRecommendation,
+    } = get();
     const collection = themeCollections.find((c) => c.id === id);
     if (!collection) return;
 
     if (collection.artworkIds.length > 0) {
       get().addArtworksToScheme(collection.artworkIds);
+    }
+
+    if (collection.lightingTemplateIds.length > 0) {
+      const primaryLighting = lightingTemplates.find(
+        (t) => t.id === collection.lightingTemplateIds[0]
+      );
+      if (primaryLighting) {
+        applyLightingTemplate(primaryLighting.id);
+      }
+    }
+
+    if (collection.materialComboIds.length > 0) {
+      const primaryMaterial = materialCombos.find(
+        (c) => c.id === collection.materialComboIds[0]
+      );
+      if (primaryMaterial) {
+        applyMaterialCombo(primaryMaterial.id);
+      }
+    }
+
+    if (collection.sceneRecommendationIds.length > 0) {
+      const primaryScene = sceneRecommendations.find(
+        (s) => s.id === collection.sceneRecommendationIds[0]
+      );
+      if (primaryScene) {
+        applySceneRecommendation(primaryScene.id);
+      }
     }
 
     updateThemeCollection(id, { useCount: collection.useCount + 1 });
@@ -2810,6 +2852,60 @@ export const useAppStore = create<AppStore>((set, get) => ({
       ),
     }));
     saveThemeCollections(get().themeCollections);
+  },
+
+  removeLightingTemplateFromThemeCollection: (collectionId, templateId) => {
+    set((state) => ({
+      themeCollections: state.themeCollections.map((c) =>
+        c.id === collectionId
+          ? { ...c, lightingTemplateIds: c.lightingTemplateIds.filter((id) => id !== templateId), updatedAt: Date.now() }
+          : c
+      ),
+    }));
+    saveThemeCollections(get().themeCollections);
+  },
+
+  removeMaterialComboFromThemeCollection: (collectionId, comboId) => {
+    set((state) => ({
+      themeCollections: state.themeCollections.map((c) =>
+        c.id === collectionId
+          ? { ...c, materialComboIds: c.materialComboIds.filter((id) => id !== comboId), updatedAt: Date.now() }
+          : c
+      ),
+    }));
+    saveThemeCollections(get().themeCollections);
+  },
+
+  removeSceneRecommendationFromThemeCollection: (collectionId, sceneId) => {
+    set((state) => ({
+      themeCollections: state.themeCollections.map((c) =>
+        c.id === collectionId
+          ? { ...c, sceneRecommendationIds: c.sceneRecommendationIds.filter((id) => id !== sceneId), updatedAt: Date.now() }
+          : c
+      ),
+    }));
+    saveThemeCollections(get().themeCollections);
+  },
+
+  getLightingTemplatesByThemeCollection: (collectionId) => {
+    const { themeCollections, lightingTemplates } = get();
+    const collection = themeCollections.find((c) => c.id === collectionId);
+    if (!collection) return [];
+    return lightingTemplates.filter((t) => collection.lightingTemplateIds.includes(t.id));
+  },
+
+  getMaterialCombosByThemeCollection: (collectionId) => {
+    const { themeCollections, materialCombos } = get();
+    const collection = themeCollections.find((c) => c.id === collectionId);
+    if (!collection) return [];
+    return materialCombos.filter((c) => collection.materialComboIds.includes(c.id));
+  },
+
+  getSceneRecommendationsByThemeCollection: (collectionId) => {
+    const { themeCollections, sceneRecommendations } = get();
+    const collection = themeCollections.find((c) => c.id === collectionId);
+    if (!collection) return [];
+    return sceneRecommendations.filter((s) => collection.sceneRecommendationIds.includes(s.id));
   },
 
   selectThemeCollection: (id) => {

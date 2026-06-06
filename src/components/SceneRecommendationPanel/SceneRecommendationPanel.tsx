@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Play, Lightbulb, Palette, Grid3X3, User, Users, BookOpen, Clock, Award, Check, X, RefreshCw } from 'lucide-react';
+import { Sparkles, Play, Lightbulb, Palette, Grid3X3, User, Users, BookOpen, Clock, Award, Check, X, RefreshCw, Layers, BookmarkMinus } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { SCENE_TYPE_LABELS, SCENE_RECOMMENDATION_CATEGORIES } from '../../types';
 
@@ -10,6 +10,8 @@ export const SceneRecommendationPanel: React.FC = () => {
     selectedSceneRecommendationId,
     selectedArtworkIds,
     artworks,
+    themeCollections,
+    selectedThemeCollectionId,
     createSceneRecommendation,
     applySceneRecommendation,
     selectSceneRecommendation,
@@ -19,6 +21,9 @@ export const SceneRecommendationPanel: React.FC = () => {
     setThemeLibraryTab,
     lightingTemplates,
     materialCombos,
+    addSceneRecommendationToThemeCollection,
+    removeSceneRecommendationFromThemeCollection,
+    selectThemeCollection,
   } = useAppStore();
 
   const [isGenerating, setIsGenerating] = useState(false);
@@ -163,6 +168,28 @@ export const SceneRecommendationPanel: React.FC = () => {
         ))}
       </div>
 
+      {selectedThemeCollectionId && (
+        <div className="mb-4 p-3 rounded-lg border border-gold/30 bg-gold/5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Layers className="w-4 h-4 text-gold" />
+              <span className="text-xs text-gold">
+                当前馆藏：{themeCollections.find((c) => c.id === selectedThemeCollectionId)?.name}
+              </span>
+            </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                selectThemeCollection(null);
+              }}
+              className="text-xs text-white/40 hover:text-white transition-colors"
+            >
+              取消选择
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto pr-1 space-y-3">
         {recommendations.length === 0 ? (
           <div className="flex flex-col items-center justify-center text-center p-8">
@@ -188,6 +215,8 @@ export const SceneRecommendationPanel: React.FC = () => {
               const isSelected = selectedSceneRecommendationId === recommendation.id;
               const suggestedLighting = getSuggestedLighting(recommendation.suggestedLightingTemplateId);
               const suggestedMaterial = getSuggestedMaterial(recommendation.suggestedMaterialComboId);
+              const currentCollection = themeCollections.find((c) => c.id === selectedThemeCollectionId);
+              const isInCollection = currentCollection?.sceneRecommendationIds.includes(recommendation.id);
 
               return (
                 <motion.div
@@ -196,7 +225,7 @@ export const SceneRecommendationPanel: React.FC = () => {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
-                  className={`card ${isSelected ? 'border-gold ring-2 ring-gold/20' : ''}`}
+                  className={`card ${isSelected ? 'border-gold ring-2 ring-gold/20' : ''} ${isInCollection ? 'ring-2 ring-gold/30' : ''}`}
                   onClick={() => selectSceneRecommendation(isSelected ? null : recommendation.id)}
                 >
                   <div className="p-4">
@@ -207,7 +236,15 @@ export const SceneRecommendationPanel: React.FC = () => {
                             {getSceneTypeIcon(recommendation.sceneType)}
                           </div>
                           <div>
-                            <h4 className="font-medium text-white text-sm">{recommendation.name}</h4>
+                            <div className="flex items-center gap-2 mb-1">
+                              <h4 className="font-medium text-white text-sm">{recommendation.name}</h4>
+                              {isInCollection && (
+                                <span className="text-xs px-1.5 py-0.5 bg-gold/20 text-gold rounded flex items-center gap-1">
+                                  <Layers className="w-3 h-3" />
+                                  已入馆藏
+                                </span>
+                              )}
+                            </div>
                             <span className="text-xs text-white/40">
                               {SCENE_TYPE_LABELS[recommendation.sceneType]}
                             </span>
@@ -290,6 +327,34 @@ export const SceneRecommendationPanel: React.FC = () => {
                             {tag}
                           </span>
                         ))}
+                      </div>
+                    )}
+
+                    {selectedThemeCollectionId && (
+                      <div className="mb-3 p-2 rounded-lg bg-white/5 border border-gallery-border">
+                        {isInCollection ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeSceneRecommendationFromThemeCollection(selectedThemeCollectionId, recommendation.id);
+                            }}
+                            className="w-full text-xs py-1.5 text-red-400 hover:text-red-300 flex items-center justify-center gap-1"
+                          >
+                            <BookmarkMinus className="w-3 h-3" />
+                            从馆藏移除
+                          </button>
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              addSceneRecommendationToThemeCollection(selectedThemeCollectionId, recommendation.id);
+                            }}
+                            className="w-full text-xs py-1.5 text-gold hover:text-gold/80 flex items-center justify-center gap-1"
+                          >
+                            <Layers className="w-3 h-3" />
+                            加入馆藏
+                          </button>
+                        )}
                       </div>
                     )}
 
