@@ -119,9 +119,10 @@ export const ProposalView: React.FC<ProposalViewProps> = ({ projectId }) => {
     setEditValue('');
   };
 
-  const handleGenerateShareLink = (expiresInDays = 7) => {
-    if (!currentProposal) return;
-    const link = generateProposalShareLink(currentProposal.id, expiresInDays);
+  const handleGenerateShareLink = (proposalId?: string, expiresInDays = 7) => {
+    const targetProposalId = proposalId || currentProposalId;
+    if (!targetProposalId) return;
+    const link = generateProposalShareLink(targetProposalId, expiresInDays);
     setShareLink(link);
   };
 
@@ -337,7 +338,7 @@ export const ProposalView: React.FC<ProposalViewProps> = ({ projectId }) => {
                         setCurrentProposal(proposal.id);
                         setShareLink('');
                         setShowShareDialog(true);
-                        handleGenerateShareLink();
+                        handleGenerateShareLink(proposal.id);
                       }}
                       className="flex-1 py-1.5 text-xs text-gold hover:bg-gold/10 rounded transition-colors flex items-center justify-center gap-1"
                     >
@@ -347,6 +348,7 @@ export const ProposalView: React.FC<ProposalViewProps> = ({ projectId }) => {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
+                        setCurrentProposal(proposal.id);
                         exportProposal(proposal.id);
                       }}
                       className="flex-1 py-1.5 text-xs text-white/70 hover:text-white hover:bg-gallery-hover rounded transition-colors flex items-center justify-center gap-1"

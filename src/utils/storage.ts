@@ -327,3 +327,52 @@ export function generateShareLink(proposal: CustomerProposal): string {
   }));
   return `${baseUrl}?share=${shareData}`;
 }
+
+export function generateFullShareLink(proposal: CustomerProposal): string {
+  const baseUrl = window.location.origin + window.location.pathname;
+  const shareData = {
+    v: 1,
+    d: proposal,
+    exp: proposal.shareExpiresAt,
+  };
+  const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(shareData))));
+  return `${baseUrl}?share=${encoded}`;
+}
+
+export function parseShareData(encoded: string): {
+  isFullData: boolean;
+  proposal?: CustomerProposal;
+  proposalId?: string;
+  token?: string;
+  expiresAt?: number;
+} | null {
+  try {
+    const decoded = decodeURIComponent(escape(atob(encoded)));
+    const data = JSON.parse(decoded);
+    
+    if (data.v === 1 && data.d) {
+      return {
+        isFullData: true,
+        proposal: data.d,
+        expiresAt: data.exp,
+      };
+    }
+    return {
+      isFullData: false,
+      proposalId: data.proposalId,
+      token: data.token,
+    };
+  } catch (e) {
+    try {
+      const decoded = atob(encoded);
+      const data = JSON.parse(decoded);
+      return {
+        isFullData: false,
+        proposalId: data.proposalId,
+        token: data.token,
+      };
+    } catch (err) {
+      return null;
+    }
+  }
+}

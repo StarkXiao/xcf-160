@@ -23,7 +23,7 @@ export const ProposalShareView: React.FC<ProposalShareViewProps> = ({
   shareToken,
   onClose,
 }) => {
-  const { proposals } = useAppStore();
+  const { proposals, parseShareLink } = useAppStore();
   const [isLoading, setIsLoading] = useState(true);
   const [isValid, setIsValid] = useState(false);
   const [isExpired, setIsExpired] = useState(false);
@@ -32,20 +32,39 @@ export const ProposalShareView: React.FC<ProposalShareViewProps> = ({
 
   useEffect(() => {
     try {
-      const decoded = atob(shareToken);
-      const data = JSON.parse(decoded);
-      const { proposalId, token } = data;
+      const parsed = parseShareLink(shareToken);
+      
+      if (!parsed) {
+        setIsValid(false);
+        setIsLoading(false);
+        return;
+      }
 
-      const foundProposal = proposals.find(
-        (p) => p.id === proposalId && p.shareToken === token
-      );
-
-      if (foundProposal) {
-        if (foundProposal.shareExpiresAt && Date.now() > foundProposal.shareExpiresAt) {
+      if (parsed.isFullData && parsed.proposal) {
+        if (parsed.expiresAt && Date.now() > parsed.expiresAt) {
           setIsExpired(true);
         } else {
-          setProposal(foundProposal);
+          setProposal(parsed.proposal);
           setIsValid(true);
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      if (!parsed.isFullData && parsed.proposalId && parsed.token) {
+        const foundProposal = proposals.find(
+          (p) => p.id === parsed.proposalId && p.shareToken === parsed.token
+        );
+
+        if (foundProposal) {
+          if (foundProposal.shareExpiresAt && Date.now() > foundProposal.shareExpiresAt) {
+            setIsExpired(true);
+          } else {
+            setProposal(foundProposal);
+            setIsValid(true);
+          }
+        } else {
+          setIsValid(false);
         }
       } else {
         setIsValid(false);
@@ -55,7 +74,7 @@ export const ProposalShareView: React.FC<ProposalShareViewProps> = ({
     } finally {
       setIsLoading(false);
     }
-  }, [shareToken, proposals]);
+  }, [shareToken, proposals, parseShareLink]);
 
   const formatDate = (timestamp: number) => {
     return new Date(timestamp).toLocaleDateString('zh-CN', {

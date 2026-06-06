@@ -68,6 +68,8 @@ import {
   saveCurrentProposalId,
   exportProposal as exportProposalUtil,
   generateShareLink as generateShareLinkUtil,
+  generateFullShareLink,
+  parseShareData,
 } from '../utils/storage';
 
 interface AppStore extends AppState {
@@ -146,6 +148,7 @@ interface AppStore extends AppState {
   generateProposalShareLink: (proposalId: string, expiresInDays?: number) => string;
   exportProposal: (proposalId: string) => void;
   regenerateProposalArtworkDescription: (proposalId: string, artworkId: string) => void;
+  parseShareLink: (encoded: string) => ReturnType<typeof parseShareData>;
 }
 
 const getInitialState = (): AppState => {
@@ -1845,7 +1848,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set({ proposals: newProposals });
     saveProposals(newProposals);
 
-    return generateShareLinkUtil(updatedProposal);
+    return generateFullShareLink(updatedProposal);
   },
 
   exportProposal: (proposalId) => {
@@ -1853,6 +1856,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const proposal = proposals.find((p) => p.id === proposalId);
     if (!proposal) return;
     exportProposalUtil(proposal);
+  },
+
+  parseShareLink: (encoded) => {
+    return parseShareData(encoded);
   },
 
   regenerateProposalArtworkDescription: (proposalId, artworkId) => {
