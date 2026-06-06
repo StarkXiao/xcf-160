@@ -168,6 +168,7 @@ interface AppStore extends AppState {
   submitIngestion: (formData: IngestionFormData) => Promise<Artwork | null>;
   getFilteredArtworks: () => Artwork[];
   getArtworksByTagId: (tagId: string) => Artwork[];
+  filterArtworks: (query: string) => Artwork[];
 }
 
 const getInitialState = (): AppState => {
@@ -1942,6 +1943,11 @@ export const useAppStore = create<AppStore>((set, get) => ({
   removeArtworkTag: (tagId) => {
     set((state) => ({
       artworkTags: state.artworkTags.filter((t) => t.id !== tagId),
+      artworks: state.artworks.map((artwork) => ({
+        ...artwork,
+        tagIds: artwork.tagIds.filter((id) => id !== tagId),
+        updatedAt: Date.now(),
+      })),
     }));
   },
 
@@ -2092,5 +2098,32 @@ export const useAppStore = create<AppStore>((set, get) => ({
   getArtworksByTagId: (tagId) => {
     const { artworks } = get();
     return artworks.filter((artwork) => artwork.tagIds.includes(tagId));
+  },
+
+  filterArtworks: (query) => {
+    const { artworks, artworkTags } = get();
+
+    if (!query.trim()) {
+      return artworks;
+    }
+
+    const lowerQuery = query.toLowerCase();
+
+    return artworks.filter((artwork) => {
+      const matchesTitle = artwork.title.toLowerCase().includes(lowerQuery);
+      const matchesArtist = artwork.artist.toLowerCase().includes(lowerQuery);
+      const matchesMedium = artwork.medium.toLowerCase().includes(lowerQuery);
+      const matchesYear = artwork.year.toString().includes(lowerQuery);
+
+      const artworkTagNames = artwork.tagIds
+        .map((tagId) => {
+          const tag = artworkTags.find((t) => t.id === tagId);
+          return tag?.name.toLowerCase() || '';
+        })
+        .filter(Boolean);
+      const matchesTag = artworkTagNames.some((name) => name.includes(lowerQuery));
+
+      return matchesTitle || matchesArtist || matchesMedium || matchesYear || matchesTag;
+    });
   },
 }));

@@ -1,20 +1,34 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Plus, Trash2, Info } from 'lucide-react';
+import { Search, Plus, Trash2, Info, Tag } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
-import type { Artwork } from '../../types';
+import type { Artwork, ArtworkTag } from '../../types';
 
 export const ArtworkList: React.FC = () => {
-  const { artworks, selectedArtworkId, setSelectedArtwork, removeArtwork } =
-    useAppStore();
+  const {
+    artworks,
+    artworkTags,
+    selectedArtworkId,
+    setSelectedArtwork,
+    removeArtwork,
+    filterArtworks,
+  } = useAppStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedInfo, setSelectedInfo] = useState<Artwork | null>(null);
 
-  const filteredArtworks = artworks.filter(
-    (artwork) =>
-      artwork.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      artwork.artist.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredArtworks = useMemo(
+    () => filterArtworks(searchQuery),
+    [searchQuery, filterArtworks]
   );
+
+  const getTagById = (tagId: string): ArtworkTag | undefined => {
+    return artworkTags.find((t) => t.id === tagId);
+  };
+
+  const handleTagClick = (tagName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSearchQuery(tagName);
+  };
 
   return (
     <div className="h-full flex flex-col bg-gallery-surface border-r border-gallery-border">
@@ -26,7 +40,7 @@ export const ArtworkList: React.FC = () => {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
           <input
             type="text"
-            placeholder="搜索作品..."
+            placeholder="搜索标题、艺术家、标签..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-9 pr-4 py-2 bg-gallery-bg border border-gallery-border rounded-lg text-sm text-white placeholder-white/40 focus:outline-none focus:border-gold/50 transition-colors"
@@ -70,6 +84,35 @@ export const ArtworkList: React.FC = () => {
                   <p className="text-xs text-white/40 mt-1">
                     {artwork.year} · {artwork.medium}
                   </p>
+                  {artwork.tagIds.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {artwork.tagIds.slice(0, 3).map((tagId) => {
+                        const tag = getTagById(tagId);
+                        if (!tag) return null;
+                        return (
+                          <span
+                            key={tagId}
+                            onClick={(e) => handleTagClick(tag.name, e)}
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] rounded-full cursor-pointer transition-opacity hover:opacity-80"
+                            style={{
+                              backgroundColor: `${tag.color}20`,
+                              color: tag.color,
+                            }}
+                          >
+                            <Tag className="w-2.5 h-2.5" />
+                            <span className="truncate max-w-[60px]">
+                              {tag.name}
+                            </span>
+                          </span>
+                        );
+                      })}
+                      {artwork.tagIds.length > 3 && (
+                        <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-white/10 text-white/50">
+                          +{artwork.tagIds.length - 3}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -153,6 +196,30 @@ export const ArtworkList: React.FC = () => {
                   <span className="text-white/40">尺寸：</span>
                   {selectedInfo.width} × {selectedInfo.height} cm
                 </p>
+                {selectedInfo.tagIds.length > 0 && (
+                  <div className="mt-2">
+                    <span className="text-white/40 mr-2">标签：</span>
+                    <div className="inline-flex flex-wrap gap-1.5 mt-1">
+                      {selectedInfo.tagIds.map((tagId) => {
+                        const tag = getTagById(tagId);
+                        if (!tag) return null;
+                        return (
+                          <span
+                            key={tagId}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full"
+                            style={{
+                              backgroundColor: `${tag.color}20`,
+                              color: tag.color,
+                            }}
+                          >
+                            <Tag className="w-3 h-3" />
+                            {tag.name}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 {selectedInfo.description && (
                   <p className="mt-4 pt-4 border-t border-gallery-border">
                     {selectedInfo.description}
