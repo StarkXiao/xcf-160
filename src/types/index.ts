@@ -192,7 +192,6 @@ export interface CuratorProject {
 export type SchemePanelTab = 'layout' | 'lighting' | 'snapshots' | 'groups' | 'progress';
 export type AppMode = 'artwork' | 'curator';
 export type ProjectViewTab = 'projects' | 'schemes' | 'versions' | 'progress' | 'export';
-export type CuratorHubTab = 'overview' | 'groups' | 'progress' | 'versions' | 'export' | 'proposal';
 export type WorkstationTab = 'ingestion' | 'library' | 'tags';
 
 export interface ProposalLightingSection {
@@ -296,35 +295,6 @@ export interface ExhibitionWallConfig {
   previewAdaptation: PreviewAdaptation;
 }
 
-export interface AppState {
-  artworks: Artwork[];
-  selectedArtworkId: string | null;
-  lighting: LightingConfig;
-  material: MaterialConfig;
-  presets: Preset[];
-  compareList: string[];
-  activePanel: 'lighting' | 'material' | 'compare' | 'storage' | 'scheme' | 'workstation' | 'wallConfig';
-  gallerySchemes: GalleryScheme[];
-  currentSchemeId: string | null;
-  selectedWallArtworkIds: string[];
-  schemePanelTab: SchemePanelTab;
-  appMode: AppMode;
-  curatorProjects: CuratorProject[];
-  currentProjectId: string | null;
-  projectViewTab: ProjectViewTab;
-  showCuratorHub: boolean;
-  curatorHubTab: CuratorHubTab;
-  selectedGroupId: string | null;
-  selectedVersionId: string | null;
-  proposals: CustomerProposal[];
-  currentProposalId: string | null;
-  artworkTags: ArtworkTag[];
-  workstationTab: WorkstationTab;
-  ingestionSearchQuery: string;
-  ingestionStatus: IngestionStatus;
-  exhibitionWallConfig: ExhibitionWallConfig;
-}
-
 export const LIGHT_TYPE_LABELS: Record<LightType, string> = {
   spotlight: '聚光灯',
   floodlight: '泛光灯',
@@ -426,15 +396,6 @@ export const EXPORT_RESOLUTION_PIXELS: Record<ExportResolution, { width: number;
   high: { width: 3840, height: 2160 },
   print: { width: 7680, height: 4320 },
 };
-
-export const CURATOR_HUB_TABS: { id: CuratorHubTab; label: string }[] = [
-  { id: 'overview', label: '项目概览' },
-  { id: 'groups', label: '作品分组' },
-  { id: 'progress', label: '布展进度' },
-  { id: 'versions', label: '版本历史' },
-  { id: 'export', label: '预览输出' },
-  { id: 'proposal', label: '客户提案' },
-];
 
 export const DEFAULT_PROGRESS_STEPS: Omit<ProgressStep, 'id'>[] = [
   { name: '确定展览主题', description: '明确展览的主题、目标和受众', status: 'not_started', order: 0 },
@@ -682,3 +643,123 @@ export const DEFAULT_EXHIBITION_WALL_CONFIG: ExhibitionWallConfig = {
   ambientLight: { ...DEFAULT_AMBIENT_LIGHT },
   previewAdaptation: { ...DEFAULT_PREVIEW_ADAPTATION },
 };
+
+export type ApprovalStatus = 'draft' | 'submitted' | 'under_review' | 'approved' | 'rejected' | 'revised' | 'archived';
+
+export interface ApprovalComment {
+  id: string;
+  approvalId: string;
+  author: string;
+  content: string;
+  createdAt: number;
+  resolved?: boolean;
+  resolvedAt?: number;
+  resolvedBy?: string;
+}
+
+export interface ApprovalHistory {
+  id: string;
+  approvalId: string;
+  status: ApprovalStatus;
+  operator: string;
+  comment?: string;
+  createdAt: number;
+}
+
+export interface ApprovalRequest {
+  id: string;
+  projectId: string;
+  schemeId: string;
+  versionId?: string;
+  title: string;
+  description?: string;
+  status: ApprovalStatus;
+  submitter: string;
+  reviewers: string[];
+  currentReviewer?: string;
+  createdAt: number;
+  submittedAt?: number;
+  reviewedAt?: number;
+  approvedAt?: number;
+  archivedAt?: number;
+  deadline?: number;
+  priority: 'low' | 'medium' | 'high';
+  tags: string[];
+}
+
+export type CuratorHubTab = 'overview' | 'groups' | 'progress' | 'versions' | 'export' | 'proposal' | 'approval';
+
+export interface AppState {
+  artworks: Artwork[];
+  selectedArtworkId: string | null;
+  lighting: LightingConfig;
+  material: MaterialConfig;
+  presets: Preset[];
+  compareList: string[];
+  activePanel: 'lighting' | 'material' | 'compare' | 'storage' | 'scheme' | 'workstation' | 'wallConfig';
+  gallerySchemes: GalleryScheme[];
+  currentSchemeId: string | null;
+  selectedWallArtworkIds: string[];
+  schemePanelTab: SchemePanelTab;
+  appMode: AppMode;
+  curatorProjects: CuratorProject[];
+  currentProjectId: string | null;
+  projectViewTab: ProjectViewTab;
+  showCuratorHub: boolean;
+  curatorHubTab: CuratorHubTab;
+  selectedGroupId: string | null;
+  selectedVersionId: string | null;
+  proposals: CustomerProposal[];
+  currentProposalId: string | null;
+  artworkTags: ArtworkTag[];
+  workstationTab: WorkstationTab;
+  ingestionSearchQuery: string;
+  ingestionStatus: IngestionStatus;
+  exhibitionWallConfig: ExhibitionWallConfig;
+  approvalRequests: ApprovalRequest[];
+  approvalComments: ApprovalComment[];
+  approvalHistories: ApprovalHistory[];
+  currentApprovalId: string | null;
+}
+
+export const APPROVAL_STATUS_LABELS: Record<ApprovalStatus, string> = {
+  draft: '草稿',
+  submitted: '已提交',
+  under_review: '评审中',
+  approved: '已通过',
+  rejected: '已驳回',
+  revised: '需修改',
+  archived: '已归档',
+};
+
+export const APPROVAL_STATUS_COLORS: Record<ApprovalStatus, string> = {
+  draft: 'bg-gray-500',
+  submitted: 'bg-blue-500',
+  under_review: 'bg-yellow-500',
+  approved: 'bg-green-500',
+  rejected: 'bg-red-500',
+  revised: 'bg-orange-500',
+  archived: 'bg-purple-500',
+};
+
+export const APPROVAL_PRIORITY_LABELS: Record<ApprovalRequest['priority'], string> = {
+  low: '低',
+  medium: '中',
+  high: '高',
+};
+
+export const APPROVAL_PRIORITY_COLORS: Record<ApprovalRequest['priority'], string> = {
+  low: 'bg-gray-500/20 text-gray-400',
+  medium: 'bg-blue-500/20 text-blue-400',
+  high: 'bg-red-500/20 text-red-400',
+};
+
+export const CURATOR_HUB_TABS: { id: CuratorHubTab; label: string }[] = [
+  { id: 'overview', label: '项目概览' },
+  { id: 'groups', label: '作品分组' },
+  { id: 'progress', label: '布展进度' },
+  { id: 'versions', label: '版本历史' },
+  { id: 'export', label: '预览输出' },
+  { id: 'proposal', label: '客户提案' },
+  { id: 'approval', label: '审批流程' },
+];

@@ -26,6 +26,10 @@ import type {
   WallColor,
   AmbientLightTemplate,
   PreviewAdaptation,
+  ApprovalRequest,
+  ApprovalStatus,
+  ApprovalComment,
+  ApprovalHistory,
 } from '../types';
 import {
   DEFAULT_LIGHTING,
@@ -183,6 +187,19 @@ interface AppStore extends AppState {
   setPreviewAdaptation: (adaptation: Partial<PreviewAdaptation>) => void;
   resetExhibitionWallConfig: () => void;
   setExhibitionWallConfig: (config: Partial<ExhibitionWallConfig>) => void;
+  createApprovalRequest: (data: Omit<ApprovalRequest, 'id' | 'createdAt' | 'status'>) => ApprovalRequest;
+  submitApprovalRequest: (approvalId: string) => void;
+  updateApprovalStatus: (approvalId: string, status: ApprovalStatus, operator: string, comment?: string) => void;
+  addApprovalComment: (approvalId: string, author: string, content: string) => void;
+  resolveApprovalComment: (commentId: string, resolvedBy: string) => void;
+  deleteApprovalRequest: (approvalId: string) => void;
+  setCurrentApproval: (approvalId: string | null) => void;
+  archiveApprovalRequest: (approvalId: string) => void;
+  rollbackToVersion: (approvalId: string, projectId: string, versionId: string) => void;
+  updateApprovalRequest: (approvalId: string, updates: Partial<ApprovalRequest>) => void;
+  getApprovalsByProjectId: (projectId: string) => ApprovalRequest[];
+  getApprovalComments: (approvalId: string) => ApprovalComment[];
+  getApprovalHistory: (approvalId: string) => ApprovalHistory[];
 }
 
 const getInitialState = (): AppState => {
@@ -232,6 +249,10 @@ const getInitialState = (): AppState => {
     ingestionSearchQuery: '',
     ingestionStatus: 'draft',
     exhibitionWallConfig: savedWallConfig || { ...DEFAULT_EXHIBITION_WALL_CONFIG },
+    approvalRequests: [],
+    approvalComments: [],
+    approvalHistories: [],
+    currentApprovalId: null,
   };
 };
 
@@ -2202,5 +2223,130 @@ export const useAppStore = create<AppStore>((set, get) => ({
       saveExhibitionWallConfig(newConfig);
       return { exhibitionWallConfig: newConfig };
     });
+  },
+
+  createApprovalRequest: (data) => {
+    const newApproval: ApprovalRequest = {
+      ...data,
+      id: `approval-${Date.now()}`,
+      status: 'draft',
+      createdAt: Date.now(),
+    };
+
+    set((state) => ({
+      approvalRequests: [...state.approvalRequests, newApproval],
+      currentApprovalId: newApproval.id,
+    }));
+
+    return newApproval;
+  },
+
+  submitApprovalRequest: (approvalId) => {
+    const { updateApprovalStatus } = get();
+    updateApprovalStatus(approvalId, 'submitted', '策展人', '提交评审');
+  },
+
+  updateApprovalStatus: (approvalId, status, operator, comment) => {
+    const now = Date.now();
+
+    const history: ApprovalHistory = {
+      id: `history-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      approvalId,
+      status,
+      operator,
+      comment,
+      createdAt: now,
+    };
+
+    set((state) => ({
+      approvalRequests: state.approvalRequests.map((a) =>
+        a.id === approvalId
+          ? {
+              ...a,
+              status,
+              submittedAt: status === 'submitted' ? now : a.submittedAt,
+              reviewedAt: status === 'under_review' ? now : a.reviewedAt,
+              approvedAt: status === 'approved' ? now : a.approvedAt,
+              archivedAt: status === 'archived' ? now : a.archivedAt,
+            }
+          : a
+      ),
+      approvalHistories: [...state.approvalHistories, history],
+    }));
+  },
+
+  addApprovalComment: (approvalId, author, content) => {
+    const comment: ApprovalComment = {
+      id: `comment-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      approvalId,
+      author,
+      content,
+      createdAt: Date.now(),
+      resolved: false,
+    };
+
+    set((state) => ({
+      approvalComments: [...state.approvalComments, comment],
+    }));
+  },
+
+  resolveApprovalComment: (commentId, resolvedBy) => {
+    set((state) => ({
+      approvalComments: state.approvalComments.map((c) =>
+        c.id === commentId
+          ? {
+              ...c,
+              resolved: true,
+              resolvedAt: Date.now(),
+              resolvedBy,
+            }
+          : c
+      ),
+    }));
+  },
+
+  deleteApprovalRequest: (approvalId) => {
+    set((state) => ({
+      approvalRequests: state.approvalRequests.filter((a) => a.id !== approvalId),
+      approvalComments: state.approvalComments.filter((c) => c.approvalId !== approvalId),
+      approvalHistories: state.approvalHistories.filter((h) => h.approvalId !== approvalId),
+      currentApprovalId: state.currentApprovalId === approvalId ? null : state.currentApprovalId,
+    }));
+  },
+
+  setCurrentApproval: (approvalId) => set({ currentApprovalId: approvalId }),
+
+  archiveApprovalRequest: (approvalId) => {
+    const { updateApprovalStatus } = get();
+    updateApprovalStatus(approvalId, 'archived', '系统', '归档评审结果');
+  },
+
+  rollbackToVersion: (approvalId, projectId, versionId) => {
+    const { loadProjectVersion, updateApprovalStatus } = get();
+    loadProjectVersion(projectId, versionId);
+    updateApprovalStatus(approvalId, 'revised', '策展人', '已回退到指定版本进行修改');
+  },
+
+  updateApprovalRequest: (approvalId, updates) => {
+    set((state) => ({
+      approvalRequests: state.approvalRequests.map((a) =>
+        a.id === approvalId ? { ...a, ...updates } : a
+      ),
+    }));
+  },
+
+  getApprovalsByProjectId: (projectId) => {
+    const { approvalRequests } = get();
+    return approvalRequests.filter((a) => a.projectId === projectId);
+  },
+
+  getApprovalComments: (approvalId) => {
+    const { approvalComments } = get();
+    return approvalComments.filter((c) => c.approvalId === approvalId);
+  },
+
+  getApprovalHistory: (approvalId) => {
+    const { approvalHistories } = get();
+    return approvalHistories.filter((h) => h.approvalId === approvalId);
   },
 }));
