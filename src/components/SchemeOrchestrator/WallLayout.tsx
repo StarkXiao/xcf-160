@@ -17,7 +17,6 @@ import { useAppStore } from '../../store/useAppStore';
 import {
   calculateLighting,
   getFrameStyle,
-  getWallStyle,
 } from '../../utils/lighting';
 import { kelvinToHex } from '../../utils/color';
 import type { WallArtwork, WallPosition } from '../../types';
@@ -54,7 +53,7 @@ export const WallLayout: React.FC = () => {
     updateWallArtworkMaterial,
     selectWallArtwork,
     clearWallArtworkSelection,
-    setSchemeWallMaterial,
+    exhibitionWallConfig,
   } = useAppStore();
 
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -430,9 +429,27 @@ export const WallLayout: React.FC = () => {
     );
   };
 
-  const wallStyle = currentScheme
-    ? getWallStyle(currentScheme.wallMaterial, 0.3)
-    : getWallStyle('matte', 0.3);
+  const { wallColor } = exhibitionWallConfig;
+
+  const wallBackgroundStyle = useMemo(() => {
+    const { baseColor, textureEnabled, textureIntensity, gradientEnabled, gradientColor, gradientAngle } = wallColor;
+    
+    let background: string;
+    if (gradientEnabled) {
+      background = `linear-gradient(${gradientAngle}deg, ${baseColor}, ${gradientColor})`;
+    } else {
+      background = baseColor;
+    }
+
+    const textureOverlay = textureEnabled
+      ? `radial-gradient(circle at 50% 50%, transparent 0%, rgba(0,0,0,${textureIntensity * 0.3}) 100%)`
+      : 'none';
+
+    return {
+      background,
+      '--texture-overlay': textureOverlay,
+    } as React.CSSProperties;
+  }, [wallColor]);
 
   return (
     <div className="h-full flex flex-col">
@@ -467,34 +484,23 @@ export const WallLayout: React.FC = () => {
         </div>
       </div>
 
-      <div className="mb-3">
-        <label className="block text-xs text-white/60 mb-1.5">墙面材质</label>
-        <div className="flex gap-2">
-          {(['matte', 'satin', 'glossy', 'concrete'] as const).map((material) => (
-            <button
-              key={material}
-              onClick={() => setSchemeWallMaterial(material)}
-              className={`px-3 py-1.5 text-xs rounded-lg border transition-all ${
-                currentScheme?.wallMaterial === material
-                  ? 'border-gold bg-gold/10 text-gold'
-                  : 'border-gallery-border bg-gallery-bg text-white/60 hover:border-gold/50 hover:text-white'
-              }`}
-            >
-              {material === 'matte' && '哑光'}
-              {material === 'satin' && '丝光'}
-              {material === 'glossy' && '高光'}
-              {material === 'concrete' && '水泥'}
-            </button>
-          ))}
-        </div>
-      </div>
-
       <div
         ref={wallRef}
-        className="flex-1 relative rounded-xl overflow-hidden transition-colors duration-500"
-        style={{ backgroundColor: wallStyle.background }}
+        className="flex-1 relative rounded-xl overflow-hidden transition-all duration-500"
+        style={{
+          ...wallBackgroundStyle,
+        }}
         onClick={handleWallClick}
       >
+        {wallColor.textureEnabled && (
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background: 'var(--texture-overlay)',
+            }}
+          />
+        )}
+
         <div
           className="absolute inset-0 opacity-30"
           style={{

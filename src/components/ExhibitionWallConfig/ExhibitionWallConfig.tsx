@@ -616,41 +616,99 @@ export const ExhibitionWallConfig: React.FC = () => {
           <h4 className="text-sm font-medium text-white mb-3">预览效果</h4>
           <div className="flex items-center justify-center">
             <div
-              className="relative border-2 border-dashed border-gold/30 rounded-lg bg-gallery-surface overflow-hidden"
+              className="relative border-2 border-dashed border-gold/30 rounded-lg overflow-hidden"
               style={{
-                width: `${previewWidth}px`,
-                height: `${previewHeight}px`,
+                width: '240px',
+                height: '240px',
+                backgroundColor: '#0a0a0a',
               }}
             >
-              {previewAdaptation.showGrid && (
-                <div
-                  className="absolute inset-0 pointer-events-none"
-                  style={{
-                    backgroundImage: `
-                      linear-gradient(to right, rgba(212, 175, 55, 0.1) 1px, transparent 1px),
-                      linear-gradient(to bottom, rgba(212, 175, 55, 0.1) 1px, transparent 1px)
-                    `,
-                    backgroundSize: `${previewAdaptation.gridSize}px ${previewAdaptation.gridSize}px`,
-                  }}
-                />
-              )}
-              {previewAdaptation.showSafeArea && (
-                <div
-                  className="absolute border-2 border-dashed border-red-500/50 pointer-events-none"
-                  style={{
-                    top: `${previewAdaptation.safeAreaMargin}%`,
-                    left: `${previewAdaptation.safeAreaMargin}%`,
-                    right: `${previewAdaptation.safeAreaMargin}%`,
-                    bottom: `${previewAdaptation.safeAreaMargin}%`,
-                  }}
-                />
-              )}
+              <div className="absolute top-1 left-1 text-[9px] text-white/30">预览区域</div>
+              
               <div
-                className="absolute inset-0 flex items-center justify-center">
+                className="absolute transition-all duration-300 rounded bg-gallery-surface"
+                style={{
+                  width: `${previewWidth}px`,
+                  height: `${previewHeight}px`,
+                  left: '50%',
+                  top: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  backgroundColor: wallColor.baseColor,
+                }}
+              >
+                {wallColor.gradientEnabled && (
+                  <div
+                    className="absolute inset-0 rounded"
+                    style={{
+                      background: `linear-gradient(${wallColor.gradientAngle}deg, ${wallColor.baseColor}, ${wallColor.gradientColor})`,
+                    }}
+                  />
+                )}
+                
+                {wallColor.textureEnabled && (
+                  <div
+                    className="absolute inset-0 pointer-events-none rounded"
+                    style={{
+                      background: `radial-gradient(circle at 50% 50%, transparent 0%, rgba(0,0,0,${wallColor.textureIntensity * 0.3}) 100%)`,
+                    }}
+                  />
+                )}
+                
+                {previewAdaptation.showGrid && (
+                  <div
+                    className="absolute inset-0 pointer-events-none"
+                    style={{
+                      backgroundImage: `
+                        linear-gradient(to right, rgba(212, 175, 55, 0.1) 1px, transparent 1px),
+                        linear-gradient(to bottom, rgba(212, 175, 55, 0.1) 1px, transparent 1px)
+                      `,
+                      backgroundSize: `${previewAdaptation.gridSize / 3}px ${previewAdaptation.gridSize / 3}px`,
+                    }}
+                  />
+                )}
+                
+                {previewAdaptation.showSafeArea && (
+                  <div
+                    className="absolute border border-dashed border-red-500/50 pointer-events-none rounded"
+                    style={{
+                      top: `${previewAdaptation.safeAreaMargin}%`,
+                      left: `${previewAdaptation.safeAreaMargin}%`,
+                      right: `${previewAdaptation.safeAreaMargin}%`,
+                      bottom: `${previewAdaptation.safeAreaMargin}%`,
+                    }}
+                  />
+                )}
+                
                 <div
-                  className="text-xs text-white/50">
+                  className="absolute rounded"
+                  style={{
+                    left: '20%',
+                    top: '25%',
+                    width: '25%',
+                    height: '40%',
+                    backgroundColor: '#d4af37',
+                    opacity: 0.6,
+                  }}
+                />
+                <div
+                  className="absolute rounded"
+                  style={{
+                    left: '55%',
+                    top: '35%',
+                    width: '30%',
+                    height: '30%',
+                    backgroundColor: '#e0f0ff',
+                    opacity: 0.6,
+                  }}
+                />
+                
+                <div className="absolute bottom-1 right-1 text-[9px] text-white/40">
                   {ratio.w}:{ratio.h}
                 </div>
+              </div>
+              
+              <div className="absolute bottom-1 left-1 text-[9px] text-white/30">
+                {PREVIEW_FIT_MODE_LABELS[previewAdaptation.fitMode]}
               </div>
             </div>
           </div>

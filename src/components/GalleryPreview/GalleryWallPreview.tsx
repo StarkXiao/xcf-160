@@ -1,10 +1,11 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAppStore } from '../../store/useAppStore';
-import { calculateLighting, getWallStyle } from '../../utils/lighting';
+import { calculateLighting } from '../../utils/lighting';
 import { kelvinToHex, kelvinToRGB } from '../../utils/color';
 import { Layers, Info, Eye } from 'lucide-react';
-import { WALL_UNIT_LABELS } from '../../types';
+import { WALL_UNIT_LABELS, PREVIEW_FIT_MODE_LABELS } from '../../types';
+import type { PreviewFitMode } from '../../types';
 
 export const GalleryWallPreview: React.FC = () => {
   const {
@@ -16,6 +17,9 @@ export const GalleryWallPreview: React.FC = () => {
     clearWallArtworkSelection,
     exhibitionWallConfig,
   } = useAppStore();
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
 
   const currentScheme = useMemo(
     () => gallerySchemes.find((s) => s.id === currentSchemeId),
@@ -50,8 +54,8 @@ export const GalleryWallPreview: React.FC = () => {
     } as React.CSSProperties;
   }, [wallColor]);
 
-  const aspectRatioStyle = useMemo(() => {
-    const { aspectRatio, customWidth, customHeight } = previewAdaptation;
+  const previewContainerStyle = useMemo(() => {
+    const { aspectRatio, customWidth, customHeight, fitMode } = previewAdaptation;
     let ratio: number;
     
     switch (aspectRatio) {
@@ -62,13 +66,53 @@ export const GalleryWallPreview: React.FC = () => {
       case 'custom': ratio = (customWidth || 16) / (customHeight || 9); break;
       default: ratio = 16 / 9;
     }
-    
+
+    const containerRatio = containerSize.width > 0 && containerSize.height > 0
+      ? containerSize.width / containerSize.height
+      : 16 / 9;
+
+    let width: string | number = '100%';
+    let height: string | number = '100%';
+
+    switch (fitMode as PreviewFitMode) {
+      case 'contain':
+        if (ratio > containerRatio) {
+          width = '100%';
+          height = `${100 / ratio * containerRatio}%`;
+        } else {
+          width = `${100 * ratio / containerRatio}%`;
+          height = '100%';
+        }
+        break;
+      case 'cover':
+        if (ratio > containerRatio) {
+          width = `${100 * ratio / containerRatio}%`;
+          height = '100%';
+        } else {
+          width = '100%';
+          height = `${100 / ratio * containerRatio}%`;
+        }
+        break;
+      case 'fill':
+        width = '100%';
+        height = '100%';
+        break;
+      case 'fit_width':
+        width = '100%';
+        height = `${100 / ratio}%`;
+        break;
+      case 'fit_height':
+        width = `${100 * ratio}%`;
+        height = '100%';
+        break;
+    }
+
     return {
       aspectRatio: `${ratio}`,
-      maxHeight: '100%',
-      maxWidth: '100%',
+      width,
+      height,
     };
-  }, [previewAdaptation]);
+  }, [previewAdaptation, containerSize]);
 
   const ambientLightStyle = useMemo(() => {
     const { colorTemperature, intensity, ambientColor } = ambientLight;
@@ -80,9 +124,20 @@ export const GalleryWallPreview: React.FC = () => {
     } as React.CSSProperties;
   }, [ambientLight]);
 
-  const wallStyle = currentScheme
-    ? getWallStyle(currentScheme.wallMaterial, 0.15)
-    : getWallStyle('matte', 0.15);
+  React.useEffect(() => {
+    if (!containerRef.current) return;
+    
+    const updateSize = () => {
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        setContainerSize({ width: rect.width, height: rect.height });
+      }
+    };
+
+    updateSize();
+    window.addEventListener('resize', updateSize);
+    return () => window.removeEventListener('resize', updateSize);
+  }, []);
 
   if (!currentScheme) {
     return (
@@ -123,7 +178,10 @@ export const GalleryWallPreview: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex-1 flex items-center justify-center p-6 overflow-hidden">
+      <div 
+        ref={containerRef}
+        className="flex-1 flex items-center justify-center p-6 overflow-hidden"
+      >
         <div
           className="relative w-full h-full flex items-center justify-center"
           style={{ padding: `${previewAdaptation.padding}px` }}
@@ -132,10 +190,8 @@ export const GalleryWallPreview: React.FC = () => {
             className="relative overflow-hidden rounded-xl"
             style={{
               ...wallBackgroundStyle,
-              ...aspectRatioStyle,
+              ...previewContainerStyle,
               ...ambientLightStyle,
-              width: '100%',
-              height: '100%',
             }}
             onClick={clearWallArtworkSelection}
           >
@@ -180,30 +236,20 @@ export const GalleryWallPreview: React.FC = () => {
               />
             )}
 
-            <div
-              className="absolute inset-0"
-              style={{
-                backgroundImage:
-                  'radial-gradient(circle, rgba(255,255,255,0.08) 1px, transparent 1px)',
-                backgroundSize: '30px 30px',
-              }}
-            />
-
             <div className="absolute top-4 left-4 flex items-center gap-2 text-white/40 text-[10px] z-10">
               <div className="w-2 h-2 rounded-full bg-gold/60" />
-              墙面: {currentScheme.wallMaterial === 'matte' && '哑光'}
-              {currentScheme.wallMaterial === 'satin' && '丝光'}
-              {currentScheme.wallMaterial === 'glossy' && '高光'}
-              {currentScheme.wallMaterial === 'concrete' && '水泥'}
+              底色: {wallColor.baseColor.toUpperCase()}
+              {wallColor.textureEnabled && <span className="mx-1">·</span>}
+              {wallColor.textureEnabled && '带纹理'}
+              {wallColor.gradientEnabled && <span className="mx-1">·</span>}
+              {wallColor.gradientEnabled && '渐变'}
             </div>
 
             <div className="absolute bottom-4 left-4 flex items-center gap-2 text-white/40 text-[10px] z-10">
               <div className="w-2 h-2 rounded-full bg-warm/60" />
               环境光: {ambientLight.name} · {ambientLight.colorTemperature}K
               <span className="mx-1">·</span>
-              灯光策略: {currentScheme.lightingStrategy.mode === 'uniform' && '统一模式'}
-              {currentScheme.lightingStrategy.mode === 'individual' && '独立模式'}
-              {currentScheme.lightingStrategy.mode === 'zone' && '分区模式'}
+              适配: {PREVIEW_FIT_MODE_LABELS[previewAdaptation.fitMode]}
             </div>
 
             <div className="absolute top-4 right-4 text-white/40 text-[10px] z-10">
