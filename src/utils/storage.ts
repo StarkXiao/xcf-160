@@ -1,4 +1,4 @@
-import type { Preset, LightingConfig, MaterialConfig, GalleryScheme } from '../types';
+import type { Preset, LightingConfig, MaterialConfig, GalleryScheme, CuratorProject } from '../types';
 
 const PRESETS_KEY = 'artwork_preview_presets';
 const LAST_ARTWORK_KEY = 'artwork_preview_last_artwork';
@@ -7,6 +7,15 @@ const LAST_MATERIAL_KEY = 'artwork_preview_last_material';
 const GALLERY_SCHEMES_KEY = 'artwork_preview_gallery_schemes';
 const CURRENT_SCHEME_KEY = 'artwork_preview_current_scheme';
 const APP_MODE_KEY = 'artwork_preview_app_mode';
+const CURATOR_PROJECTS_KEY = 'artwork_preview_curator_projects';
+const CURRENT_PROJECT_KEY = 'artwork_preview_current_project';
+
+export interface ProjectExportData {
+  project: CuratorProject;
+  schemes: GalleryScheme[];
+  exportTime: number;
+  version: string;
+}
 
 export function savePresets(presets: Preset[]): void {
   try {
@@ -185,4 +194,78 @@ export function loadAppMode(): string | null {
     console.error('Failed to load app mode:', e);
     return null;
   }
+}
+
+export function saveCuratorProjects(projects: CuratorProject[]): void {
+  try {
+    localStorage.setItem(CURATOR_PROJECTS_KEY, JSON.stringify(projects));
+  } catch (e) {
+    console.error('Failed to save curator projects:', e);
+  }
+}
+
+export function loadCuratorProjects(): CuratorProject[] {
+  try {
+    const data = localStorage.getItem(CURATOR_PROJECTS_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch (e) {
+    console.error('Failed to load curator projects:', e);
+    return [];
+  }
+}
+
+export function saveCurrentProjectId(projectId: string): void {
+  try {
+    localStorage.setItem(CURRENT_PROJECT_KEY, projectId);
+  } catch (e) {
+    console.error('Failed to save current project:', e);
+  }
+}
+
+export function loadCurrentProjectId(): string | null {
+  try {
+    return localStorage.getItem(CURRENT_PROJECT_KEY);
+  } catch (e) {
+    console.error('Failed to load current project:', e);
+    return null;
+  }
+}
+
+export function exportProject(data: ProjectExportData): void {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${data.project.name.replace(/\s+/g, '_')}_${data.project.id}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+export function importProject(file: File): Promise<ProjectExportData> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target?.result as string);
+        if (data.project && data.schemes && Array.isArray(data.schemes)) {
+          resolve(data as ProjectExportData);
+        } else if (data.id && data.schemeIds) {
+          resolve({
+            project: data,
+            schemes: [],
+            exportTime: Date.now(),
+            version: '1.0',
+          });
+        } else {
+          reject(new Error('Invalid project file format'));
+        }
+      } catch (err) {
+        reject(new Error('Invalid project file'));
+      }
+    };
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsText(file);
+  });
 }

@@ -11,14 +11,18 @@ import type {
   LightingStrategy,
   SchemePanelTab,
   AppMode,
+  CuratorProject,
+  ProjectVersion,
+  ProjectViewTab,
 } from '../types';
 import {
   DEFAULT_LIGHTING,
   DEFAULT_MATERIAL,
   DEFAULT_WALL_POSITION,
   DEFAULT_LIGHTING_STRATEGY,
+  DEFAULT_PROJECT,
 } from '../types';
-import { mockArtworks, mockGallerySchemes } from '../data/mockData';
+import { mockArtworks, mockGallerySchemes, mockCuratorProjects } from '../data/mockData';
 import {
   loadPresets,
   savePresets,
@@ -34,6 +38,12 @@ import {
   saveCurrentSchemeId,
   loadAppMode,
   saveAppMode,
+  loadCuratorProjects,
+  saveCuratorProjects,
+  loadCurrentProjectId,
+  saveCurrentProjectId,
+  exportProject as exportProjectUtil,
+  importProject as importProjectUtil,
 } from '../utils/storage';
 
 interface AppStore extends AppState {
@@ -71,6 +81,21 @@ interface AppStore extends AppState {
   saveSchemeSnapshot: (schemeId: string, name: string) => void;
   setSchemeWallMaterial: (wallMaterial: AppState['material']['wallMaterial']) => void;
   setAppMode: (mode: AppMode) => void;
+  setShowCuratorHub: (show: boolean) => void;
+  setProjectViewTab: (tab: ProjectViewTab) => void;
+  createProject: (name: string, description?: string, tags?: string[]) => void;
+  deleteProject: (id: string) => void;
+  setCurrentProject: (id: string | null) => void;
+  updateProject: (id: string, updates: Partial<CuratorProject>) => void;
+  duplicateProject: (id: string, newName: string) => void;
+  addSchemeToProject: (projectId: string, schemeId: string) => void;
+  removeSchemeFromProject: (projectId: string, schemeId: string) => void;
+  saveProjectVersion: (projectId: string, name: string, description?: string) => void;
+  loadProjectVersion: (projectId: string, versionId: string) => void;
+  deleteProjectVersion: (projectId: string, versionId: string) => void;
+  exportProject: (id: string) => void;
+  importProject: (project: CuratorProject) => void;
+  openProject: (projectId: string) => void;
 }
 
 const getInitialState = (): AppState => {
@@ -81,8 +106,12 @@ const getInitialState = (): AppState => {
   const savedSchemes = loadGallerySchemes();
   const savedCurrentSchemeId = loadCurrentSchemeId();
   const savedAppMode = loadAppMode();
+  const savedProjects = loadCuratorProjects();
+  const savedCurrentProjectId = loadCurrentProjectId();
 
   const schemes = savedSchemes.length > 0 ? savedSchemes : mockGallerySchemes;
+  const projects = savedProjects.length > 0 ? savedProjects : mockCuratorProjects;
+  const currentProjectId = savedCurrentProjectId || projects[0]?.id || null;
   const currentSchemeId = savedCurrentSchemeId || schemes[0]?.id || null;
   const appMode = (savedAppMode as AppMode) || 'curator';
 
@@ -99,6 +128,10 @@ const getInitialState = (): AppState => {
     selectedWallArtworkIds: [],
     schemePanelTab: 'layout',
     appMode,
+    curatorProjects: projects,
+    currentProjectId,
+    projectViewTab: 'projects',
+    showCuratorHub: false,
   };
 };
 
@@ -568,5 +601,385 @@ export const useAppStore = create<AppStore>((set, get) => ({
   setAppMode: (mode) => {
     set({ appMode: mode, selectedWallArtworkIds: [] });
     saveAppMode(mode);
+  },
+
+  setShowCuratorHub: (show) => {
+    set({ showCuratorHub: show });
+  },
+
+  setProjectViewTab: (tab) => {
+    set({ projectViewTab: tab });
+  },
+
+  createProject: (name, description, tags = []) => {
+    const newProject: CuratorProject = {
+      ...DEFAULT_PROJECT,
+      id: Date.now().toString(),
+      name,
+      description,
+      tags,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    const defaultScheme: GalleryScheme = {
+      id: `scheme-${Date.now()}`,
+      name: `${name} - 主方案`,
+      description: '默认创建的主方案',
+      wallArtworks: [],
+      lightingStrategy: { ...DEFAULT_LIGHTING_STRATEGY },
+      wallMaterial: 'matte',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    newProject.schemeIds = [defaultScheme.id];
+    newProject.currentSchemeId = defaultScheme.id;
+
+    set((state) => ({
+      curatorProjects: [...state.curatorProjects, newProject],
+      gallerySchemes: [...state.gallerySchemes, defaultScheme],
+      currentProjectId: newProject.id,
+      currentSchemeId: defaultScheme.id,
+      selectedWallArtworkIds: [],
+    }));
+
+    saveCuratorProjects(get().curatorProjects);
+    saveGallerySchemes(get().gallerySchemes);
+    saveCurrentProjectId(newProject.id);
+    saveCurrentSchemeId(defaultScheme.id);
+  },
+
+  deleteProject: (id) => {
+    set((state) => {
+      const project = state.curatorProjects.find((p) => p.id === id);
+      if (!project) return state;
+
+      const newProjects = state.curatorProjects.filter((p) => p.id !== id);
+      const newSchemes = state.gallerySchemes.filter((s) => !project.schemeIds.includes(s.id));
+      const newCurrentProjectId = state.currentProjectId === id
+        ? (newProjects[0]?.id || null)
+        : state.currentProjectId;
+      const newCurrentSchemeId = newCurrentProjectId
+        ? (newProjects.find((p) => p.id === newCurrentProjectId)?.currentSchemeId || null)
+        : null;
+
+      saveCuratorProjects(newProjects);
+      saveGallerySchemes(newSchemes);
+      if (newCurrentProjectId) saveCurrentProjectId(newCurrentProjectId);
+      if (newCurrentSchemeId) saveCurrentSchemeId(newCurrentSchemeId);
+
+      return {
+        curatorProjects: newProjects,
+        gallerySchemes: newSchemes,
+        currentProjectId: newCurrentProjectId,
+        currentSchemeId: newCurrentSchemeId,
+        selectedWallArtworkIds: [],
+      };
+    });
+  },
+
+  setCurrentProject: (id) => {
+    set((state) => {
+      const project = state.curatorProjects.find((p) => p.id === id);
+      const newSchemeId = project?.currentSchemeId || state.currentSchemeId;
+      return {
+        currentProjectId: id,
+        currentSchemeId: newSchemeId,
+        selectedWallArtworkIds: [],
+      };
+    });
+    if (id) saveCurrentProjectId(id);
+  },
+
+  updateProject: (id, updates) => {
+    set((state) => ({
+      curatorProjects: state.curatorProjects.map((p) =>
+        p.id === id ? { ...p, ...updates, updatedAt: Date.now() } : p
+      ),
+    }));
+    saveCuratorProjects(get().curatorProjects);
+  },
+
+  duplicateProject: (id, newName) => {
+    const { curatorProjects, gallerySchemes } = get();
+    const project = curatorProjects.find((p) => p.id === id);
+    if (!project) return;
+
+    const newProjectId = Date.now().toString();
+    const schemeIdMap: Record<string, string> = {};
+
+    const newSchemes: GalleryScheme[] = project.schemeIds.map((schemeId) => {
+      const scheme = gallerySchemes.find((s) => s.id === schemeId);
+      if (!scheme) return null;
+
+      const newSchemeId = `${newProjectId}-scheme-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      schemeIdMap[schemeId] = newSchemeId;
+
+      return {
+        ...scheme,
+        id: newSchemeId,
+        name: `${newName} - ${scheme.name}`,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        wallArtworks: scheme.wallArtworks.map((w) => ({
+          ...w,
+          id: `${newSchemeId}-${w.artworkId}-${Math.random().toString(36).substr(2, 9)}`,
+        })),
+        lightingStrategy: { ...scheme.lightingStrategy },
+      };
+    }).filter(Boolean) as GalleryScheme[];
+
+    const newProject: CuratorProject = {
+      ...project,
+      id: newProjectId,
+      name: newName,
+      schemeIds: newSchemes.map((s) => s.id),
+      currentSchemeId: schemeIdMap[project.currentSchemeId || ''] || newSchemes[0]?.id || null,
+      versions: project.versions.map((v) => ({
+        ...v,
+        id: `version-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        scheme: {
+          ...v.scheme,
+          id: `${newProjectId}-version-scheme-${Date.now()}`,
+          wallArtworks: v.scheme.wallArtworks.map((w) => ({
+            ...w,
+            id: `${newProjectId}-version-${w.id}`,
+          })),
+        },
+      })),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    set((state) => ({
+      curatorProjects: [...state.curatorProjects, newProject],
+      gallerySchemes: [...state.gallerySchemes, ...newSchemes],
+      currentProjectId: newProject.id,
+      currentSchemeId: newProject.currentSchemeId,
+      selectedWallArtworkIds: [],
+    }));
+
+    saveCuratorProjects(get().curatorProjects);
+    saveGallerySchemes(get().gallerySchemes);
+    saveCurrentProjectId(newProject.id);
+    if (newProject.currentSchemeId) saveCurrentSchemeId(newProject.currentSchemeId);
+  },
+
+  addSchemeToProject: (projectId, schemeId) => {
+    set((state) => ({
+      curatorProjects: state.curatorProjects.map((p) =>
+        p.id === projectId
+          ? {
+              ...p,
+              schemeIds: [...p.schemeIds, schemeId],
+              currentSchemeId: p.currentSchemeId || schemeId,
+              updatedAt: Date.now(),
+            }
+          : p
+      ),
+    }));
+    saveCuratorProjects(get().curatorProjects);
+  },
+
+  removeSchemeFromProject: (projectId, schemeId) => {
+    set((state) => {
+      const project = state.curatorProjects.find((p) => p.id === projectId);
+      if (!project) return state;
+
+      const remainingSchemeIds = project.schemeIds.filter((id) => id !== schemeId);
+      const newCurrentSchemeId = project.currentSchemeId === schemeId
+        ? (remainingSchemeIds[0] || null)
+        : project.currentSchemeId;
+
+      return {
+        curatorProjects: state.curatorProjects.map((p) =>
+          p.id === projectId
+            ? {
+                ...p,
+                schemeIds: remainingSchemeIds,
+                currentSchemeId: newCurrentSchemeId,
+                updatedAt: Date.now(),
+              }
+            : p
+        ),
+        gallerySchemes: state.gallerySchemes.filter((s) => s.id !== schemeId),
+        currentSchemeId: state.currentSchemeId === schemeId ? newCurrentSchemeId : state.currentSchemeId,
+      };
+    });
+    saveCuratorProjects(get().curatorProjects);
+    saveGallerySchemes(get().gallerySchemes);
+  },
+
+  saveProjectVersion: (projectId, name, description) => {
+    const { curatorProjects, gallerySchemes, currentSchemeId } = get();
+    const project = curatorProjects.find((p) => p.id === projectId);
+    if (!project || !currentSchemeId) return;
+
+    const scheme = gallerySchemes.find((s) => s.id === currentSchemeId);
+    if (!scheme) return;
+
+    const version: ProjectVersion = {
+      id: `version-${Date.now()}`,
+      name,
+      description,
+      scheme: JSON.parse(JSON.stringify(scheme)),
+      createdAt: Date.now(),
+      createdBy: 'curator',
+    };
+
+    set((state) => ({
+      curatorProjects: state.curatorProjects.map((p) =>
+        p.id === projectId
+          ? { ...p, versions: [...p.versions, version], updatedAt: Date.now() }
+          : p
+      ),
+    }));
+    saveCuratorProjects(get().curatorProjects);
+  },
+
+  loadProjectVersion: (projectId, versionId) => {
+    const { curatorProjects } = get();
+    const project = curatorProjects.find((p) => p.id === projectId);
+    if (!project) return;
+
+    const version = project.versions.find((v) => v.id === versionId);
+    if (!version) return;
+
+    const restoredScheme: GalleryScheme = {
+      ...version.scheme,
+      id: `restored-${Date.now()}`,
+      name: `${version.scheme.name} (恢复自 ${version.name})`,
+      updatedAt: Date.now(),
+      wallArtworks: version.scheme.wallArtworks.map((w) => ({
+        ...w,
+        id: `restored-${Date.now()}-${w.artworkId}-${Math.random().toString(36).substr(2, 9)}`,
+      })),
+    };
+
+    set((state) => ({
+      gallerySchemes: [...state.gallerySchemes, restoredScheme],
+      curatorProjects: state.curatorProjects.map((p) =>
+        p.id === projectId
+          ? {
+              ...p,
+              schemeIds: [...p.schemeIds, restoredScheme.id],
+              currentSchemeId: restoredScheme.id,
+              updatedAt: Date.now(),
+            }
+          : p
+      ),
+      currentSchemeId: restoredScheme.id,
+      selectedWallArtworkIds: [],
+    }));
+
+    saveCuratorProjects(get().curatorProjects);
+    saveGallerySchemes(get().gallerySchemes);
+    saveCurrentSchemeId(restoredScheme.id);
+  },
+
+  deleteProjectVersion: (projectId, versionId) => {
+    set((state) => ({
+      curatorProjects: state.curatorProjects.map((p) =>
+        p.id === projectId
+          ? { ...p, versions: p.versions.filter((v) => v.id !== versionId), updatedAt: Date.now() }
+          : p
+      ),
+    }));
+    saveCuratorProjects(get().curatorProjects);
+  },
+
+  exportProject: (id) => {
+    const { curatorProjects, gallerySchemes } = get();
+    const project = curatorProjects.find((p) => p.id === id);
+    if (!project) return;
+
+    const projectSchemes = gallerySchemes.filter((s) => project.schemeIds.includes(s.id));
+    const exportData = {
+      project,
+      schemes: projectSchemes,
+      exportTime: Date.now(),
+      version: '1.0',
+    };
+
+    exportProjectUtil(exportData);
+  },
+
+  importProject: (project) => {
+    const newProjectId = Date.now().toString();
+    const schemeIdMap: Record<string, string> = {};
+
+    const newSchemes: GalleryScheme[] = project.schemeIds.map((oldSchemeId) => {
+      const scheme = get().gallerySchemes.find((s) => s.id === oldSchemeId);
+      if (!scheme) return null;
+
+      const newSchemeId = `${newProjectId}-scheme-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      schemeIdMap[oldSchemeId] = newSchemeId;
+
+      return {
+        ...scheme,
+        id: newSchemeId,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        wallArtworks: scheme.wallArtworks.map((w) => ({
+          ...w,
+          id: `${newSchemeId}-${w.artworkId}-${Math.random().toString(36).substr(2, 9)}`,
+        })),
+      };
+    }).filter(Boolean) as GalleryScheme[];
+
+    const newProject: CuratorProject = {
+      ...project,
+      id: newProjectId,
+      schemeIds: newSchemes.map((s) => s.id),
+      currentSchemeId: project.currentSchemeId ? schemeIdMap[project.currentSchemeId] : newSchemes[0]?.id || null,
+      versions: project.versions.map((v) => ({
+        ...v,
+        id: `version-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        createdAt: Date.now(),
+        scheme: {
+          ...v.scheme,
+          id: `${newProjectId}-version-scheme-${Date.now()}`,
+          wallArtworks: v.scheme.wallArtworks.map((w) => ({
+            ...w,
+            id: `${newProjectId}-version-${w.id}`,
+          })),
+        },
+      })),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    set((state) => ({
+      curatorProjects: [...state.curatorProjects, newProject],
+      gallerySchemes: [...state.gallerySchemes, ...newSchemes],
+      currentProjectId: newProject.id,
+      currentSchemeId: newProject.currentSchemeId,
+      selectedWallArtworkIds: [],
+    }));
+
+    saveCuratorProjects(get().curatorProjects);
+    saveGallerySchemes(get().gallerySchemes);
+    saveCurrentProjectId(newProject.id);
+    if (newProject.currentSchemeId) saveCurrentSchemeId(newProject.currentSchemeId);
+  },
+
+  openProject: (projectId) => {
+    const { curatorProjects } = get();
+    const project = curatorProjects.find((p) => p.id === projectId);
+    if (!project) return;
+
+    set({
+      currentProjectId: projectId,
+      currentSchemeId: project.currentSchemeId,
+      appMode: 'curator',
+      activePanel: 'scheme',
+      showCuratorHub: false,
+      selectedWallArtworkIds: [],
+    });
+
+    saveCurrentProjectId(projectId);
+    if (project.currentSchemeId) saveCurrentSchemeId(project.currentSchemeId);
+    saveAppMode('curator');
   },
 }));

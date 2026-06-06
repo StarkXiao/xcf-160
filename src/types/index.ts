@@ -83,8 +83,32 @@ export interface GalleryScheme {
   updatedAt: number;
 }
 
+export interface ProjectVersion {
+  id: string;
+  name: string;
+  description?: string;
+  scheme: GalleryScheme;
+  createdAt: number;
+  createdBy: string;
+}
+
+export interface CuratorProject {
+  id: string;
+  name: string;
+  description?: string;
+  thumbnail?: string;
+  schemeIds: string[];
+  currentSchemeId: string | null;
+  versions: ProjectVersion[];
+  status: 'draft' | 'in_progress' | 'completed' | 'archived';
+  tags: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+
 export type SchemePanelTab = 'layout' | 'lighting' | 'snapshots';
 export type AppMode = 'artwork' | 'curator';
+export type ProjectViewTab = 'projects' | 'schemes' | 'versions';
 
 export interface AppState {
   artworks: Artwork[];
@@ -99,6 +123,10 @@ export interface AppState {
   selectedWallArtworkIds: string[];
   schemePanelTab: SchemePanelTab;
   appMode: AppMode;
+  curatorProjects: CuratorProject[];
+  currentProjectId: string | null;
+  projectViewTab: ProjectViewTab;
+  showCuratorHub: boolean;
 }
 
 export const LIGHT_TYPE_LABELS: Record<LightType, string> = {
@@ -169,4 +197,27 @@ export const SCHEME_PANEL_TABS: { id: SchemePanelTab; label: string }[] = [
 export const APP_MODE_LABELS: Record<AppMode, string> = {
   artwork: '单作品预览',
   curator: '展厅编排',
+};
+
+export const PROJECT_STATUS_LABELS: Record<CuratorProject['status'], string> = {
+  draft: '草稿',
+  in_progress: '进行中',
+  completed: '已完成',
+  archived: '已归档',
+};
+
+export const PROJECT_VIEW_TABS: { id: ProjectViewTab; label: string }[] = [
+  { id: 'projects', label: '项目列表' },
+  { id: 'schemes', label: '方案管理' },
+  { id: 'versions', label: '版本历史' },
+];
+
+export const DEFAULT_PROJECT: Omit<CuratorProject, 'id' | 'createdAt' | 'updatedAt'> = {
+  name: '',
+  description: '',
+  schemeIds: [],
+  currentSchemeId: null,
+  versions: [],
+  status: 'draft',
+  tags: [],
 };

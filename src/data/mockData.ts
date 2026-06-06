@@ -1,4 +1,4 @@
-import type { Artwork, GalleryScheme } from '../types';
+import type { Artwork, GalleryScheme, CuratorProject } from '../types';
 import {
   DEFAULT_LIGHTING,
   DEFAULT_MATERIAL,
@@ -210,6 +210,54 @@ export const mockGallerySchemes: GalleryScheme[] = [
     },
     wallMaterial: 'satin',
     createdAt: Date.now() - 86400000 * 3,
+    updatedAt: Date.now() - 3600000,
+  },
+];
+
+export const mockCuratorProjects: CuratorProject[] = [
+  {
+    id: 'project-1',
+    name: '2026 春季大师展',
+    description: '博物馆年度重磅展览，汇集文艺复兴至印象派时期的经典杰作',
+    schemeIds: ['scheme-1'],
+    currentSchemeId: 'scheme-1',
+    versions: [],
+    status: 'in_progress',
+    tags: ['博物馆', '经典', '文艺复兴'],
+    createdAt: Date.now() - 86400000 * 14,
+    updatedAt: Date.now() - 86400000 * 2,
+  },
+  {
+    id: 'project-2',
+    name: '现代艺术特展',
+    description: '从后印象派到表现主义的现代艺术探索之旅',
+    schemeIds: ['scheme-2'],
+    currentSchemeId: 'scheme-2',
+    versions: [
+      {
+        id: 'version-1',
+        name: '初版方案',
+        description: '第一版挂墙方案',
+        scheme: mockGallerySchemes[1],
+        createdAt: Date.now() - 86400000 * 4,
+        createdBy: 'curator',
+      },
+    ],
+    status: 'completed',
+    tags: ['现代艺术', '特展', '表现主义'],
+    createdAt: Date.now() - 86400000 * 10,
+    updatedAt: Date.now() - 86400000,
+  },
+  {
+    id: 'project-3',
+    name: '印象派花园主题展',
+    description: '莫奈与梵高的自然光影对话',
+    schemeIds: ['scheme-3'],
+    currentSchemeId: 'scheme-3',
+    versions: [],
+    status: 'draft',
+    tags: ['印象派', '自然', '光影'],
+    createdAt: Date.now() - 86400000 * 5,
     updatedAt: Date.now() - 3600000,
   },
 ];
