@@ -16,6 +16,11 @@ import type {
   ProjectViewTab,
   CustomerProposal,
   ProposalArtworkSection,
+  ArtworkTag,
+  IngestionFormData,
+  IngestionValidationError,
+  WorkstationTab,
+  IngestionStatus,
 } from '../types';
 import {
   DEFAULT_LIGHTING,
@@ -30,6 +35,8 @@ import {
   LIGHT_TYPE_LABELS,
   FRAME_MATERIAL_LABELS,
   WALL_MATERIAL_LABELS,
+  DEFAULT_ARTWORK_TAGS,
+  DEFAULT_INGESTION_FORM,
 } from '../types';
 import type {
   ArtworkGroup,
@@ -149,6 +156,18 @@ interface AppStore extends AppState {
   exportProposal: (proposalId: string) => void;
   regenerateProposalArtworkDescription: (proposalId: string, artworkId: string) => void;
   parseShareLink: (encoded: string) => ReturnType<typeof parseShareData>;
+  setWorkstationTab: (tab: WorkstationTab) => void;
+  setIngestionSearchQuery: (query: string) => void;
+  setIngestionStatus: (status: IngestionStatus) => void;
+  addArtworkTag: (tag: Omit<ArtworkTag, 'id'>) => void;
+  updateArtworkTag: (tagId: string, updates: Partial<ArtworkTag>) => void;
+  removeArtworkTag: (tagId: string) => void;
+  addArtworkWithTags: (artwork: Omit<Artwork, 'id' | 'createdAt' | 'updatedAt' | 'tagIds'> & { tagIds: string[] }) => void;
+  updateArtworkWithTags: (artworkId: string, updates: Partial<Artwork> & { tagIds?: string[] }) => void;
+  validateIngestionForm: (formData: IngestionFormData) => IngestionValidationError[];
+  submitIngestion: (formData: IngestionFormData) => Promise<Artwork | null>;
+  getFilteredArtworks: () => Artwork[];
+  getArtworksByTagId: (tagId: string) => Artwork[];
 }
 
 const getInitialState = (): AppState => {
@@ -192,6 +211,10 @@ const getInitialState = (): AppState => {
     selectedVersionId: null,
     proposals: savedProposals,
     currentProposalId: savedCurrentProposalId,
+    artworkTags: DEFAULT_ARTWORK_TAGS,
+    workstationTab: 'ingestion',
+    ingestionSearchQuery: '',
+    ingestionStatus: 'draft',
   };
 };
 
@@ -1892,5 +1915,182 @@ export const useAppStore = create<AppStore>((set, get) => ({
     );
     set({ proposals: newProposals });
     saveProposals(newProposals);
+  },
+
+  setWorkstationTab: (tab) => set({ workstationTab: tab }),
+
+  setIngestionSearchQuery: (query) => set({ ingestionSearchQuery: query }),
+
+  setIngestionStatus: (status) => set({ ingestionStatus: status }),
+
+  addArtworkTag: (tag) => {
+    const newTag: ArtworkTag = {
+      ...tag,
+      id: `tag-${Date.now()}`,
+    };
+    set((state) => ({ artworkTags: [...state.artworkTags, newTag] }));
+  },
+
+  updateArtworkTag: (tagId, updates) => {
+    set((state) => ({
+      artworkTags: state.artworkTags.map((t) =>
+        t.id === tagId ? { ...t, ...updates } : t
+      ),
+    }));
+  },
+
+  removeArtworkTag: (tagId) => {
+    set((state) => ({
+      artworkTags: state.artworkTags.filter((t) => t.id !== tagId),
+    }));
+  },
+
+  addArtworkWithTags: (artwork) => {
+    const now = Date.now();
+    const newArtwork: Artwork = {
+      ...artwork,
+      id: Date.now().toString(),
+      createdAt: now,
+      updatedAt: now,
+    };
+    set((state) => ({ artworks: [...state.artworks, newArtwork] }));
+  },
+
+  updateArtworkWithTags: (artworkId, updates) => {
+    set((state) => ({
+      artworks: state.artworks.map((a) =>
+        a.id === artworkId
+          ? { ...a, ...updates, updatedAt: Date.now() }
+          : a
+      ),
+    }));
+  },
+
+  validateIngestionForm: (formData) => {
+    const errors: IngestionValidationError[] = [];
+
+    if (!formData.title.trim()) {
+      errors.push({ field: 'title', message: '请输入作品标题' });
+    } else if (formData.title.length > 100) {
+      errors.push({ field: 'title', message: '标题不能超过100个字符' });
+    }
+
+    if (!formData.artist.trim()) {
+      errors.push({ field: 'artist', message: '请输入艺术家名称' });
+    }
+
+    const year = Number(formData.year);
+    if (!formData.year) {
+      errors.push({ field: 'year', message: '请输入创作年份' });
+    } else if (isNaN(year) || year < 1000 || year > new Date().getFullYear()) {
+      errors.push({ field: 'year', message: '请输入有效的年份' });
+    }
+
+    const width = Number(formData.width);
+    if (!formData.width) {
+      errors.push({ field: 'width', message: '请输入作品宽度' });
+    } else if (isNaN(width) || width <= 0 || width > 1000) {
+      errors.push({ field: 'width', message: '宽度必须在0-1000cm之间' });
+    }
+
+    const height = Number(formData.height);
+    if (!formData.height) {
+      errors.push({ field: 'height', message: '请输入作品高度' });
+    } else if (isNaN(height) || height <= 0 || height > 1000) {
+      errors.push({ field: 'height', message: '高度必须在0-1000cm之间' });
+    }
+
+    if (formData.depth) {
+      const depth = Number(formData.depth);
+      if (isNaN(depth) || depth <= 0 || depth > 500) {
+        errors.push({ field: 'depth', message: '深度必须在0-500cm之间' });
+      }
+    }
+
+    if (!formData.medium.trim()) {
+      errors.push({ field: 'medium', message: '请输入创作媒介' });
+    }
+
+    if (!formData.imageUrl && !formData.imageFile) {
+      errors.push({ field: 'imageUrl', message: '请上传作品图片或输入图片URL' });
+    }
+
+    return errors;
+  },
+
+  submitIngestion: async (formData) => {
+    const { validateIngestionForm, addArtworkWithTags } = get();
+
+    const errors = validateIngestionForm(formData);
+    if (errors.length > 0) {
+      set({ ingestionStatus: 'error' });
+      return null;
+    }
+
+    set({ ingestionStatus: 'uploading' });
+
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    set({ ingestionStatus: 'validating' });
+
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    let imageUrl = formData.imageUrl;
+
+    if (formData.imageFile) {
+      imageUrl = URL.createObjectURL(formData.imageFile);
+    }
+
+    const newArtwork = {
+      title: formData.title.trim(),
+      artist: formData.artist.trim(),
+      year: Number(formData.year),
+      width: Number(formData.width),
+      height: Number(formData.height),
+      depth: formData.depth ? Number(formData.depth) : undefined,
+      medium: formData.medium.trim(),
+      description: formData.description.trim(),
+      imageUrl,
+      tagIds: formData.tagIds,
+    };
+
+    addArtworkWithTags(newArtwork);
+
+    set({ ingestionStatus: 'completed' });
+
+    const { artworks } = get();
+    return artworks[artworks.length - 1];
+  },
+
+  getFilteredArtworks: () => {
+    const { artworks, ingestionSearchQuery, artworkTags } = get();
+
+    if (!ingestionSearchQuery.trim()) {
+      return artworks;
+    }
+
+    const query = ingestionSearchQuery.toLowerCase();
+
+    return artworks.filter((artwork) => {
+      const matchesTitle = artwork.title.toLowerCase().includes(query);
+      const matchesArtist = artwork.artist.toLowerCase().includes(query);
+      const matchesMedium = artwork.medium.toLowerCase().includes(query);
+      const matchesYear = artwork.year.toString().includes(query);
+
+      const artworkTagNames = artwork.tagIds
+        .map((tagId) => {
+          const tag = artworkTags.find((t) => t.id === tagId);
+          return tag?.name.toLowerCase() || '';
+        })
+        .filter(Boolean);
+      const matchesTag = artworkTagNames.some((name) => name.includes(query));
+
+      return matchesTitle || matchesArtist || matchesMedium || matchesYear || matchesTag;
+    });
+  },
+
+  getArtworksByTagId: (tagId) => {
+    const { artworks } = get();
+    return artworks.filter((artwork) => artwork.tagIds.includes(tagId));
   },
 }));

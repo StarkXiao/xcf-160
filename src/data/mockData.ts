@@ -17,6 +17,9 @@ export const mockArtworks: Artwork[] = [
     height: 92.1,
     medium: '布面油画',
     description: '梵高最著名的作品之一，描绘了夜空中旋转的星云和明亮的月亮。',
+    tagIds: ['tag-1', 'tag-6', 'tag-11', 'tag-20', 'tag-25'],
+    createdAt: Date.now() - 86400000 * 365,
+    updatedAt: Date.now() - 86400000 * 180,
   },
   {
     id: '2',
@@ -28,6 +31,9 @@ export const mockArtworks: Artwork[] = [
     height: 53,
     medium: '木板油画',
     description: '文艺复兴时期最具标志性的肖像画，以神秘的微笑闻名于世。',
+    tagIds: ['tag-1', 'tag-10', 'tag-14', 'tag-16', 'tag-20', 'tag-25'],
+    createdAt: Date.now() - 86400000 * 365,
+    updatedAt: Date.now() - 86400000 * 200,
   },
   {
     id: '3',
@@ -39,6 +45,9 @@ export const mockArtworks: Artwork[] = [
     height: 94.1,
     medium: '布面油画',
     description: '莫奈睡莲系列的代表作品，捕捉了光影在水面上的瞬间变化。',
+    tagIds: ['tag-1', 'tag-6', 'tag-12', 'tag-15', 'tag-20', 'tag-25'],
+    createdAt: Date.now() - 86400000 * 300,
+    updatedAt: Date.now() - 86400000 * 150,
   },
   {
     id: '4',
@@ -50,6 +59,9 @@ export const mockArtworks: Artwork[] = [
     height: 73.5,
     medium: '蛋彩画',
     description: '表现主义的标志性作品，传达了深刻的焦虑和存在的痛苦。',
+    tagIds: ['tag-7', 'tag-9', 'tag-11', 'tag-18', 'tag-20', 'tag-24'],
+    createdAt: Date.now() - 86400000 * 280,
+    updatedAt: Date.now() - 86400000 * 120,
   },
   {
     id: '5',
@@ -61,6 +73,9 @@ export const mockArtworks: Artwork[] = [
     height: 39,
     medium: '布面油画',
     description: '荷兰黄金时代的杰作，被誉为"北方的蒙娜丽莎"。',
+    tagIds: ['tag-1', 'tag-10', 'tag-16', 'tag-19', 'tag-25'],
+    createdAt: Date.now() - 86400000 * 260,
+    updatedAt: Date.now() - 86400000 * 100,
   },
   {
     id: '6',
@@ -72,6 +87,9 @@ export const mockArtworks: Artwork[] = [
     height: 73,
     medium: '布面油画',
     description: '梵高向日葵系列中最著名的一幅，充满了生命的力量和热情。',
+    tagIds: ['tag-1', 'tag-6', 'tag-11', 'tag-17', 'tag-20', 'tag-25'],
+    createdAt: Date.now() - 86400000 * 240,
+    updatedAt: Date.now() - 86400000 * 90,
   },
   {
     id: '7',
@@ -83,6 +101,9 @@ export const mockArtworks: Artwork[] = [
     height: 33,
     medium: '布面油画',
     description: '超现实主义的代表作，以融化的时钟象征时间的相对性。',
+    tagIds: ['tag-1', 'tag-8', 'tag-9', 'tag-12', 'tag-19', 'tag-24'],
+    createdAt: Date.now() - 86400000 * 220,
+    updatedAt: Date.now() - 86400000 * 80,
   },
   {
     id: '8',
@@ -92,8 +113,12 @@ export const mockArtworks: Artwork[] = [
     imageUrl: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=david%20sculpture%20michelangelo%20renaissance%20marble%20statue%20male%20figure%20classical%20beauty&image_size=square_hd',
     width: 517,
     height: 199,
+    depth: 200,
     medium: '大理石雕塑',
     description: '文艺复兴时期最完美的雕塑之一，展现了人体美的极致。',
+    tagIds: ['tag-3', 'tag-10', 'tag-14', 'tag-18', 'tag-22', 'tag-23'],
+    createdAt: Date.now() - 86400000 * 200,
+    updatedAt: Date.now() - 86400000 * 60,
   },
 ];
 

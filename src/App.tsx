@@ -14,6 +14,7 @@ import {
   Folder,
   Check,
   FolderOpen,
+  Archive,
 } from 'lucide-react';
 import { useAppStore } from './store/useAppStore';
 import { ArtworkList } from './components/ArtworkList/ArtworkList';
@@ -26,6 +27,7 @@ import { StoragePanel } from './components/StoragePanel/StoragePanel';
 import { SchemeOrchestrator } from './components/SchemeOrchestrator/SchemeOrchestrator';
 import { CuratorHub } from './components/CuratorHub/CuratorHub';
 import { ProposalShareView } from './components/ProposalView/ProposalShareView';
+import { ArtworkIngestionWorkstation } from './components/ArtworkIngestionWorkstation/ArtworkIngestionWorkstation';
 import type { AppState, AppMode } from './types';
 import { APP_MODE_LABELS, PROJECT_STATUS_LABELS } from './types';
 
@@ -37,6 +39,7 @@ const tabs: { id: PanelTab; label: string; icon: React.ReactNode }[] = [
   { id: 'material', label: '材质', icon: <Layers className="w-4 h-4" /> },
   { id: 'compare', label: '对比', icon: <GitCompare className="w-4 h-4" /> },
   { id: 'storage', label: '保存', icon: <Save className="w-4 h-4" /> },
+  { id: 'workstation', label: '入库', icon: <Archive className="w-4 h-4" /> },
 ];
 
 const artworkModeTabs: { id: PanelTab; label: string; icon: React.ReactNode }[] = [
@@ -44,6 +47,7 @@ const artworkModeTabs: { id: PanelTab; label: string; icon: React.ReactNode }[] 
   { id: 'material', label: '材质', icon: <Layers className="w-4 h-4" /> },
   { id: 'compare', label: '对比', icon: <GitCompare className="w-4 h-4" /> },
   { id: 'storage', label: '保存', icon: <Save className="w-4 h-4" /> },
+  { id: 'workstation', label: '入库', icon: <Archive className="w-4 h-4" /> },
 ];
 
 export default function App() {
@@ -128,6 +132,8 @@ export default function App() {
         return <CompareView />;
       case 'storage':
         return <StoragePanel />;
+      case 'workstation':
+        return <ArtworkIngestionWorkstation />;
       default:
         return appMode === 'curator' ? <SchemeOrchestrator /> : <LightingPanel />;
     }

@@ -1,3 +1,31 @@
+export interface ArtworkTag {
+  id: string;
+  name: string;
+  color: string;
+  category: string;
+}
+
+export type IngestionStatus = 'draft' | 'uploading' | 'validating' | 'pending' | 'completed' | 'error';
+
+export interface IngestionFormData {
+  title: string;
+  artist: string;
+  year: number | string;
+  width: number | string;
+  height: number | string;
+  depth?: number | string;
+  medium: string;
+  description: string;
+  tagIds: string[];
+  imageUrl: string;
+  imageFile?: File;
+}
+
+export interface IngestionValidationError {
+  field: keyof IngestionFormData | 'general';
+  message: string;
+}
+
 export interface Artwork {
   id: string;
   title: string;
@@ -6,8 +34,12 @@ export interface Artwork {
   imageUrl: string;
   width: number;
   height: number;
+  depth?: number;
   medium: string;
   description?: string;
+  tagIds: string[];
+  createdAt: number;
+  updatedAt: number;
 }
 
 export type LightType = 'spotlight' | 'floodlight' | 'ambient';
@@ -161,6 +193,7 @@ export type SchemePanelTab = 'layout' | 'lighting' | 'snapshots' | 'groups' | 'p
 export type AppMode = 'artwork' | 'curator';
 export type ProjectViewTab = 'projects' | 'schemes' | 'versions' | 'progress' | 'export';
 export type CuratorHubTab = 'overview' | 'groups' | 'progress' | 'versions' | 'export' | 'proposal';
+export type WorkstationTab = 'ingestion' | 'library' | 'tags';
 
 export interface ProposalLightingSection {
   title: string;
@@ -221,7 +254,7 @@ export interface AppState {
   material: MaterialConfig;
   presets: Preset[];
   compareList: string[];
-  activePanel: 'lighting' | 'material' | 'compare' | 'storage' | 'scheme';
+  activePanel: 'lighting' | 'material' | 'compare' | 'storage' | 'scheme' | 'workstation';
   gallerySchemes: GalleryScheme[];
   currentSchemeId: string | null;
   selectedWallArtworkIds: string[];
@@ -236,6 +269,10 @@ export interface AppState {
   selectedVersionId: string | null;
   proposals: CustomerProposal[];
   currentProposalId: string | null;
+  artworkTags: ArtworkTag[];
+  workstationTab: WorkstationTab;
+  ingestionSearchQuery: string;
+  ingestionStatus: IngestionStatus;
 }
 
 export const LIGHT_TYPE_LABELS: Record<LightType, string> = {
@@ -407,4 +444,69 @@ export const DEFAULT_PROJECT: Omit<CuratorProject, 'id' | 'createdAt' | 'updated
   },
   status: 'draft',
   tags: [],
+};
+
+export const WORKSTATION_TABS: { id: WorkstationTab; label: string }[] = [
+  { id: 'ingestion', label: '入库登记' },
+  { id: 'library', label: '作品库' },
+  { id: 'tags', label: '标签管理' },
+];
+
+export const INGESTION_STATUS_LABELS: Record<IngestionStatus, string> = {
+  draft: '草稿',
+  uploading: '上传中',
+  validating: '校验中',
+  pending: '待确认',
+  completed: '已完成',
+  error: '出错',
+};
+
+export const TAG_CATEGORIES: { id: string; label: string }[] = [
+  { id: 'style', label: '艺术风格' },
+  { id: 'medium', label: '创作媒介' },
+  { id: 'era', label: '年代时期' },
+  { id: 'theme', label: '主题内容' },
+  { id: 'size', label: '尺寸规格' },
+  { id: 'collection', label: '收藏分类' },
+];
+
+export const DEFAULT_ARTWORK_TAGS: ArtworkTag[] = [
+  { id: 'tag-1', name: '油画', color: '#E91E63', category: 'medium' },
+  { id: 'tag-2', name: '水彩', color: '#2196F3', category: 'medium' },
+  { id: 'tag-3', name: '雕塑', color: '#9C27B0', category: 'medium' },
+  { id: 'tag-4', name: '摄影', color: '#00BCD4', category: 'medium' },
+  { id: 'tag-5', name: '版画', color: '#FF9800', category: 'medium' },
+  { id: 'tag-6', name: '印象派', color: '#4CAF50', category: 'style' },
+  { id: 'tag-7', name: '现实主义', color: '#F44336', category: 'style' },
+  { id: 'tag-8', name: '抽象派', color: '#9575CD', category: 'style' },
+  { id: 'tag-9', name: '现代艺术', color: '#009688', category: 'style' },
+  { id: 'tag-10', name: '古典主义', color: '#FFC107', category: 'style' },
+  { id: 'tag-11', name: '19世纪', color: '#795548', category: 'era' },
+  { id: 'tag-12', name: '20世纪', color: '#607D8B', category: 'era' },
+  { id: 'tag-13', name: '当代', color: '#FF5722', category: 'era' },
+  { id: 'tag-14', name: '文艺复兴', color: '#E91E63', category: 'era' },
+  { id: 'tag-15', name: '风景画', color: '#8BC34A', category: 'theme' },
+  { id: 'tag-16', name: '肖像画', color: '#FF4081', category: 'theme' },
+  { id: 'tag-17', name: '静物', color: '#03A9F4', category: 'theme' },
+  { id: 'tag-18', name: '人物', color: '#4CAF50', category: 'theme' },
+  { id: 'tag-19', name: '小品', color: '#CDDC39', category: 'size' },
+  { id: 'tag-20', name: '中幅', color: '#FFEB3B', category: 'size' },
+  { id: 'tag-21', name: '大幅', color: '#FF9800', category: 'size' },
+  { id: 'tag-22', name: '巨幅', color: '#F44336', category: 'size' },
+  { id: 'tag-23', name: '常设展品', color: '#3F51B5', category: 'collection' },
+  { id: 'tag-24', name: '临时展览', color: '#00BCD4', category: 'collection' },
+  { id: 'tag-25', name: '馆藏精品', color: '#FF5722', category: 'collection' },
+];
+
+export const DEFAULT_INGESTION_FORM: IngestionFormData = {
+  title: '',
+  artist: '',
+  year: '',
+  width: '',
+  height: '',
+  depth: '',
+  medium: '',
+  description: '',
+  tagIds: [],
+  imageUrl: '',
 };
