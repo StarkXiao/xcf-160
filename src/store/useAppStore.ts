@@ -36,6 +36,17 @@ import type {
   ThemeCollection,
   ThemeLibraryTab,
   SceneType,
+  ExhibitionQuotation,
+  ArtworkCostBreakdown,
+  SpaceCostBreakdown,
+  QuotationConfig,
+  FrameMaterialPricing,
+  GlassType,
+  MatBoard,
+  LightingEquipment,
+  ConstructionItem,
+  FrameMaterialGrade,
+  QuotationSummary,
 } from '../types';
 import {
   DEFAULT_LIGHTING,
@@ -55,6 +66,13 @@ import {
   DEFAULT_EXHIBITION_WALL_CONFIG,
   DEFAULT_LIGHTING_TEMPLATES,
   DEFAULT_MATERIAL_COMBOS,
+  DEFAULT_QUOTATION_CONFIG,
+  FRAME_MATERIAL_PRICING,
+  GLASS_TYPES,
+  MAT_BOARDS,
+  LIGHTING_EQUIPMENT,
+  CONSTRUCTION_ITEMS,
+  DEFAULT_WALL_MATERIAL_PRICES,
 } from '../types';
 import type {
   ArtworkGroup,
@@ -267,6 +285,17 @@ interface AppStore extends AppState {
   getFilteredThemeCollections: (category?: string, query?: string) => ThemeCollection[];
   getLightingTemplatesByArtwork: (artworkId: string) => LightingTemplate[];
   getMaterialCombosByArtwork: (artworkId: string) => MaterialCombo[];
+  calculateArtworkCost: (wallArtwork: WallArtwork, config?: Partial<QuotationConfig>) => ArtworkCostBreakdown;
+  calculateSpaceCost: (scheme: GalleryScheme, config?: Partial<QuotationConfig>) => SpaceCostBreakdown;
+  generateQuotation: (projectId: string, schemeId: string, title: string, config?: Partial<QuotationConfig>) => ExhibitionQuotation;
+  updateQuotation: (quotationId: string, updates: Partial<ExhibitionQuotation>) => void;
+  deleteQuotation: (quotationId: string) => void;
+  setCurrentQuotation: (quotationId: string | null) => void;
+  updateQuotationConfig: (config: Partial<QuotationConfig>) => void;
+  recalculateQuotation: (quotationId: string) => void;
+  getQuotationsByProjectId: (projectId: string) => ExhibitionQuotation[];
+  getQuotationSummary: (quotation: ExhibitionQuotation) => QuotationSummary;
+  exportQuotation: (quotationId: string) => void;
 }
 
 const getInitialState = (): AppState => {
@@ -338,6 +367,9 @@ const getInitialState = (): AppState => {
     selectedMaterialComboId: null,
     selectedSceneRecommendationId: null,
     selectedThemeCollectionId: null,
+    quotations: [],
+    currentQuotationId: null,
+    quotationConfig: { ...DEFAULT_QUOTATION_CONFIG },
   };
 };
 
@@ -2984,5 +3016,309 @@ export const useAppStore = create<AppStore>((set, get) => ({
   getMaterialCombosByArtwork: (artworkId) => {
     const { materialCombos } = get();
     return materialCombos.filter((c) => c.artworkIds.includes(artworkId));
+  },
+
+  calculateArtworkCost: (wallArtwork, customConfig) => {
+    const { artworks, quotationConfig } = get();
+    const config = { ...quotationConfig, ...customConfig };
+    const artwork = artworks.find((a) => a.id === wallArtwork.artworkId);
+    if (!artwork) {
+      return {} as ArtworkCostBreakdown;
+    }
+
+    const width = artwork.width / 100;
+    const height = artwork.height / 100;
+    const perimeter = 2 * (width + height);
+    const area = width * height;
+
+    const framePricing = FRAME_MATERIAL_PRICING.find(
+      (p) => p.material === wallArtwork.material.frameMaterial && p.grade === config.defaultFrameGrade
+    ) || FRAME_MATERIAL_PRICING[0];
+
+    const frameWidth = config.defaultFrameWidth / 100;
+    const frameSubtotal = perimeter * framePricing.pricePerMeter * (1 + frameWidth * 0.5);
+
+    const glass = GLASS_TYPES.find((g) => g.id === config.defaultGlassType) || GLASS_TYPES[0];
+    const glassArea = (width + frameWidth * 2) * (height + frameWidth * 2);
+    const glassSubtotal = glassArea * glass.pricePerSquareMeter;
+
+    const matBoard = MAT_BOARDS[0];
+    const matBorder = config.defaultMatBorderWidth / 100;
+    const matArea = (width + matBorder * 2) * (height + matBorder * 2) - area;
+    const matSubtotal = matArea > 0 ? matArea * matBoard.pricePerSquareMeter : 0;
+
+    const spotlight = LIGHTING_EQUIPMENT.find((l) => l.id === config.defaultSpotlightType) || LIGHTING_EQUIPMENT[0];
+    const lightingQuantity = wallArtwork.lighting.type === 'spotlight' ? 2 : wallArtwork.lighting.type === 'floodlight' ? 1 : 0;
+    const lightingSubtotal = lightingQuantity * spotlight.pricePerUnit;
+
+    const mountingItem = CONSTRUCTION_ITEMS.find((c) => c.id === 'mounting-artwork') || CONSTRUCTION_ITEMS[0];
+    const mountingSubtotal = 1 * mountingItem.unitPrice;
+
+    const artworkTotal = frameSubtotal + glassSubtotal + matSubtotal + lightingSubtotal + mountingSubtotal;
+
+    return {
+      artworkId: artwork.id,
+      artworkTitle: artwork.title,
+      dimensions: { width: artwork.width, height: artwork.height, unit: 'cm' },
+      frameCost: {
+        material: wallArtwork.material.frameMaterial,
+        grade: config.defaultFrameGrade,
+        perimeter: Number(perimeter.toFixed(2)),
+        width: config.defaultFrameWidth,
+        unitPrice: framePricing.pricePerMeter,
+        subtotal: Math.round(frameSubtotal * 100) / 100,
+      },
+      glassCost: {
+        glassType: glass.id,
+        area: Number(glassArea.toFixed(2)),
+        unitPrice: glass.pricePerSquareMeter,
+        subtotal: Math.round(glassSubtotal * 100) / 100,
+      },
+      matBoardCost: {
+        matBoard: matBoard.id,
+        area: Math.max(0, Number(matArea.toFixed(2))),
+        borderWidth: config.defaultMatBorderWidth,
+        unitPrice: matBoard.pricePerSquareMeter,
+        subtotal: Math.round(matSubtotal * 100) / 100,
+      },
+      lightingCost: {
+        equipmentId: spotlight.id,
+        equipmentName: spotlight.name,
+        quantity: lightingQuantity,
+        unitPrice: spotlight.pricePerUnit,
+        subtotal: Math.round(lightingSubtotal * 100) / 100,
+      },
+      mountingCost: {
+        item: mountingItem,
+        quantity: 1,
+        unitPrice: mountingItem.unitPrice,
+        subtotal: Math.round(mountingSubtotal * 100) / 100,
+      },
+      artworkTotal: Math.round(artworkTotal * 100) / 100,
+    };
+  },
+
+  calculateSpaceCost: (scheme, customConfig) => {
+    const { exhibitionWallConfig, quotationConfig } = get();
+    const config = { ...quotationConfig, ...customConfig };
+
+    const wallWidth = exhibitionWallConfig.dimensions.width / 100;
+    const wallHeight = exhibitionWallConfig.dimensions.height / 100;
+    const wallArea = wallWidth * wallHeight;
+
+    const wallMaterialPrice = config.defaultWallMaterialPrice[scheme.wallMaterial] || DEFAULT_WALL_MATERIAL_PRICES[scheme.wallMaterial];
+    const wallTreatmentSubtotal = wallArea * wallMaterialPrice;
+
+    const ambientLight = LIGHTING_EQUIPMENT.find((l) => l.id === config.defaultAmbientLightType) || LIGHTING_EQUIPMENT[5];
+    const ambientLightQuantity = Math.ceil(wallWidth / 3);
+    const ambientLightSubtotal = ambientLightQuantity * ambientLight.pricePerUnit;
+
+    const trackLength = wallWidth * scheme.wallArtworks.length * 0.8;
+    const trackSubtotal = trackLength * config.trackLightingPricePerMeter;
+
+    const electricalItem = CONSTRUCTION_ITEMS.find((c) => c.id === 'wiring') || CONSTRUCTION_ITEMS[0];
+    const electricalQuantity = wallWidth * 2;
+    const electricalSubtotal = electricalQuantity * electricalItem.unitPrice;
+
+    const laborItem = CONSTRUCTION_ITEMS.find((c) => c.id === 'technician') || CONSTRUCTION_ITEMS[0];
+    const laborDays = Math.ceil(scheme.wallArtworks.length / 3) + 1;
+    const laborSubtotal = laborDays * laborItem.unitPrice;
+
+    const transportItem = CONSTRUCTION_ITEMS.find((c) => c.id === 'transport-large') || CONSTRUCTION_ITEMS[0];
+    const transportQuantity = scheme.wallArtworks.length > 5 ? 2 : 1;
+    const transportSubtotal = transportQuantity * transportItem.unitPrice;
+
+    const otherCosts: { item: ConstructionItem; quantity: number; unitPrice: number; subtotal: number }[] = [];
+
+    const packingItem = CONSTRUCTION_ITEMS.find((c) => c.id === 'packing') || CONSTRUCTION_ITEMS[0];
+    const packingSubtotal = scheme.wallArtworks.length * packingItem.unitPrice;
+    otherCosts.push({
+      item: packingItem,
+      quantity: scheme.wallArtworks.length,
+      unitPrice: packingItem.unitPrice,
+      subtotal: Math.round(packingSubtotal * 100) / 100,
+    });
+
+    const spaceTotal = wallTreatmentSubtotal + ambientLightSubtotal + trackSubtotal +
+      electricalSubtotal + laborSubtotal + transportSubtotal + packingSubtotal;
+
+    return {
+      wallTreatmentCost: {
+        wallMaterial: scheme.wallMaterial,
+        area: Number(wallArea.toFixed(2)),
+        unitPrice: wallMaterialPrice,
+        subtotal: Math.round(wallTreatmentSubtotal * 100) / 100,
+      },
+      ambientLightingCost: {
+        equipment: ambientLight,
+        quantity: ambientLightQuantity,
+        unitPrice: ambientLight.pricePerUnit,
+        subtotal: Math.round(ambientLightSubtotal * 100) / 100,
+      },
+      trackLightingCost: {
+        length: Number(trackLength.toFixed(2)),
+        unitPrice: config.trackLightingPricePerMeter,
+        subtotal: Math.round(trackSubtotal * 100) / 100,
+      },
+      electricalCost: {
+        item: electricalItem,
+        quantity: Math.round(electricalQuantity * 100) / 100,
+        unitPrice: electricalItem.unitPrice,
+        subtotal: Math.round(electricalSubtotal * 100) / 100,
+      },
+      laborCost: {
+        item: laborItem,
+        quantity: laborDays,
+        unitPrice: laborItem.unitPrice,
+        subtotal: Math.round(laborSubtotal * 100) / 100,
+      },
+      transportCost: {
+        item: transportItem,
+        quantity: transportQuantity,
+        unitPrice: transportItem.unitPrice,
+        subtotal: Math.round(transportSubtotal * 100) / 100,
+      },
+      otherCosts,
+      spaceTotal: Math.round(spaceTotal * 100) / 100,
+    };
+  },
+
+  generateQuotation: (projectId, schemeId, title, customConfig) => {
+    const { gallerySchemes, calculateArtworkCost, calculateSpaceCost, quotationConfig } = get();
+    const scheme = gallerySchemes.find((s) => s.id === schemeId);
+    if (!scheme) return {} as ExhibitionQuotation;
+
+    const config = { ...quotationConfig, ...customConfig };
+
+    const artworkCosts = scheme.wallArtworks
+      .map((wa) => calculateArtworkCost(wa, config))
+      .filter((cost) => cost.artworkId);
+
+    const spaceCost = calculateSpaceCost(scheme, config);
+
+    const subtotal = artworkCosts.reduce((sum, cost) => sum + cost.artworkTotal, 0) + spaceCost.spaceTotal;
+    const taxAmount = subtotal * config.taxRate;
+    const discountAmount = 0;
+    const grandTotal = subtotal + taxAmount - discountAmount;
+
+    const newQuotation: ExhibitionQuotation = {
+      id: `quotation-${Date.now()}`,
+      projectId,
+      schemeId,
+      title,
+      description: `基于"${scheme.name}"方案生成的布展报价单`,
+      artworkCosts,
+      spaceCost,
+      subtotal: Math.round(subtotal * 100) / 100,
+      taxRate: config.taxRate,
+      taxAmount: Math.round(taxAmount * 100) / 100,
+      discountRate: 0,
+      discountAmount: 0,
+      grandTotal: Math.round(grandTotal * 100) / 100,
+      status: 'draft',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    set((state) => ({
+      quotations: [...state.quotations, newQuotation],
+      currentQuotationId: newQuotation.id,
+    }));
+
+    return newQuotation;
+  },
+
+  updateQuotation: (quotationId, updates) => {
+    const { quotations } = get();
+    const newQuotations = quotations.map((q) =>
+      q.id === quotationId ? { ...q, ...updates, updatedAt: Date.now() } : q
+    );
+    set({ quotations: newQuotations });
+  },
+
+  deleteQuotation: (quotationId) => {
+    const { quotations, currentQuotationId } = get();
+    const newQuotations = quotations.filter((q) => q.id !== quotationId);
+    const newCurrentId = currentQuotationId === quotationId
+      ? (newQuotations[0]?.id || null)
+      : currentQuotationId;
+    set({ quotations: newQuotations, currentQuotationId: newCurrentId });
+  },
+
+  setCurrentQuotation: (quotationId) => set({ currentQuotationId: quotationId }),
+
+  updateQuotationConfig: (config) => {
+    set((state) => ({
+      quotationConfig: { ...state.quotationConfig, ...config },
+    }));
+  },
+
+  recalculateQuotation: (quotationId) => {
+    const { quotations, gallerySchemes, calculateArtworkCost, calculateSpaceCost, quotationConfig } = get();
+    const quotation = quotations.find((q) => q.id === quotationId);
+    if (!quotation) return;
+
+    const scheme = gallerySchemes.find((s) => s.id === quotation.schemeId);
+    if (!scheme) return;
+
+    const artworkCosts = scheme.wallArtworks
+      .map((wa) => calculateArtworkCost(wa, quotationConfig))
+      .filter((cost) => cost.artworkId);
+
+    const spaceCost = calculateSpaceCost(scheme, quotationConfig);
+
+    const subtotal = artworkCosts.reduce((sum, cost) => sum + cost.artworkTotal, 0) + spaceCost.spaceTotal;
+    const taxAmount = subtotal * quotation.taxRate;
+    const discountAmount = subtotal * quotation.discountRate;
+    const grandTotal = subtotal + taxAmount - discountAmount;
+
+    const updatedQuotation = {
+      ...quotation,
+      artworkCosts,
+      spaceCost,
+      subtotal: Math.round(subtotal * 100) / 100,
+      taxAmount: Math.round(taxAmount * 100) / 100,
+      discountAmount: Math.round(discountAmount * 100) / 100,
+      grandTotal: Math.round(grandTotal * 100) / 100,
+      updatedAt: Date.now(),
+    };
+
+    set((state) => ({
+      quotations: state.quotations.map((q) => q.id === quotationId ? updatedQuotation : q),
+    }));
+  },
+
+  getQuotationsByProjectId: (projectId) => {
+    const { quotations } = get();
+    return quotations.filter((q) => q.projectId === projectId);
+  },
+
+  getQuotationSummary: (quotation) => {
+    return {
+      artworkCosts: quotation.artworkCosts,
+      spaceCost: quotation.spaceCost,
+      subtotal: quotation.subtotal,
+      taxRate: quotation.taxRate,
+      taxAmount: quotation.taxAmount,
+      discountRate: quotation.discountRate,
+      discountAmount: quotation.discountAmount,
+      grandTotal: quotation.grandTotal,
+    };
+  },
+
+  exportQuotation: (quotationId) => {
+    const { quotations } = get();
+    const quotation = quotations.find((q) => q.id === quotationId);
+    if (!quotation) return;
+
+    const blob = new Blob([JSON.stringify(quotation, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${quotation.title.replace(/\s+/g, '_')}_${quotation.id}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   },
 }));

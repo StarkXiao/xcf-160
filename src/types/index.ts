@@ -687,7 +687,7 @@ export interface ApprovalRequest {
   tags: string[];
 }
 
-export type CuratorHubTab = 'overview' | 'groups' | 'progress' | 'versions' | 'export' | 'proposal' | 'approval';
+export type CuratorHubTab = 'overview' | 'groups' | 'progress' | 'versions' | 'export' | 'proposal' | 'approval' | 'quotation';
 
 export interface AppState {
   artworks: Artwork[];
@@ -730,6 +730,9 @@ export interface AppState {
   selectedMaterialComboId: string | null;
   selectedSceneRecommendationId: string | null;
   selectedThemeCollectionId: string | null;
+  quotations: ExhibitionQuotation[];
+  currentQuotationId: string | null;
+  quotationConfig: QuotationConfig;
 }
 
 export const APPROVAL_STATUS_LABELS: Record<ApprovalStatus, string> = {
@@ -772,6 +775,7 @@ export const CURATOR_HUB_TABS: { id: CuratorHubTab; label: string }[] = [
   { id: 'export', label: '预览输出' },
   { id: 'proposal', label: '客户提案' },
   { id: 'approval', label: '审批流程' },
+  { id: 'quotation', label: '布展报价' },
 ];
 
 export interface LightingTemplate {
@@ -1052,3 +1056,394 @@ export const DEFAULT_MATERIAL_COMBOS: Omit<MaterialCombo, 'id' | 'createdAt' | '
     isPublic: true,
   },
 ];
+
+export type FrameMaterialGrade = 'economy' | 'standard' | 'premium' | 'luxury';
+
+export interface FrameMaterialPricing {
+  material: FrameMaterial;
+  grade: FrameMaterialGrade;
+  pricePerMeter: number;
+  widthOptions: number[];
+  description: string;
+}
+
+export interface GlassType {
+  id: string;
+  name: string;
+  pricePerSquareMeter: number;
+  uvProtection: number;
+  antiGlare: boolean;
+  description: string;
+}
+
+export interface MatBoard {
+  id: string;
+  name: string;
+  color: string;
+  pricePerSquareMeter: number;
+  thickness: number;
+  acidFree: boolean;
+  description: string;
+}
+
+export interface LightingEquipment {
+  id: string;
+  name: string;
+  type: LightType;
+  brand: string;
+  model: string;
+  pricePerUnit: number;
+  power: number;
+  colorTemperatureRange: [number, number];
+  beamAngleRange: [number, number];
+  lifespan: number;
+  description: string;
+}
+
+export interface ConstructionItem {
+  id: string;
+  name: string;
+  category: 'wall' | 'floor' | 'ceiling' | 'electrical' | 'labor' | 'transport' | 'other';
+  unit: 'item' | 'meter' | 'squareMeter' | 'hour' | 'personDay';
+  unitPrice: number;
+  description: string;
+}
+
+export interface ArtworkCostBreakdown {
+  artworkId: string;
+  artworkTitle: string;
+  dimensions: { width: number; height: number; unit: string };
+  frameCost: {
+    material: FrameMaterial;
+    grade: FrameMaterialGrade;
+    perimeter: number;
+    width: number;
+    unitPrice: number;
+    subtotal: number;
+  };
+  glassCost: {
+    glassType: string;
+    area: number;
+    unitPrice: number;
+    subtotal: number;
+  };
+  matBoardCost: {
+    matBoard: string;
+    area: number;
+    borderWidth: number;
+    unitPrice: number;
+    subtotal: number;
+  };
+  lightingCost: {
+    equipmentId: string;
+    equipmentName: string;
+    quantity: number;
+    unitPrice: number;
+    subtotal: number;
+  };
+  mountingCost: {
+    item: ConstructionItem;
+    quantity: number;
+    unitPrice: number;
+    subtotal: number;
+  };
+  artworkTotal: number;
+}
+
+export interface SpaceCostBreakdown {
+  wallTreatmentCost: {
+    wallMaterial: WallMaterial;
+    area: number;
+    unitPrice: number;
+    subtotal: number;
+  };
+  ambientLightingCost: {
+    equipment: LightingEquipment;
+    quantity: number;
+    unitPrice: number;
+    subtotal: number;
+  };
+  trackLightingCost: {
+    length: number;
+    unitPrice: number;
+    subtotal: number;
+  };
+  electricalCost: {
+    item: ConstructionItem;
+    quantity: number;
+    unitPrice: number;
+    subtotal: number;
+  };
+  laborCost: {
+    item: ConstructionItem;
+    quantity: number;
+    unitPrice: number;
+    subtotal: number;
+  };
+  transportCost: {
+    item: ConstructionItem;
+    quantity: number;
+    unitPrice: number;
+    subtotal: number;
+  };
+  otherCosts: {
+    item: ConstructionItem;
+    quantity: number;
+    unitPrice: number;
+    subtotal: number;
+  }[];
+  spaceTotal: number;
+}
+
+export interface QuotationSummary {
+  artworkCosts: ArtworkCostBreakdown[];
+  spaceCost: SpaceCostBreakdown;
+  subtotal: number;
+  taxRate: number;
+  taxAmount: number;
+  discountRate: number;
+  discountAmount: number;
+  grandTotal: number;
+}
+
+export interface ExhibitionQuotation {
+  id: string;
+  projectId: string;
+  schemeId: string;
+  title: string;
+  description?: string;
+  artworkCosts: ArtworkCostBreakdown[];
+  spaceCost: SpaceCostBreakdown;
+  subtotal: number;
+  taxRate: number;
+  taxAmount: number;
+  discountRate: number;
+  discountAmount: number;
+  grandTotal: number;
+  status: 'draft' | 'finalized' | 'sent' | 'approved' | 'rejected';
+  createdAt: number;
+  updatedAt: number;
+  expiresAt?: number;
+  notes?: string;
+}
+
+export interface QuotationConfig {
+  defaultFrameGrade: FrameMaterialGrade;
+  defaultFrameWidth: number;
+  defaultMatBorderWidth: number;
+  defaultGlassType: string;
+  defaultSpotlightType: string;
+  defaultAmbientLightType: string;
+  defaultWallMaterialPrice: Record<WallMaterial, number>;
+  trackLightingPricePerMeter: number;
+  taxRate: number;
+  currency: string;
+}
+
+export const FRAME_MATERIAL_GRADE_LABELS: Record<FrameMaterialGrade, string> = {
+  economy: '经济型',
+  standard: '标准型',
+  premium: '优质型',
+  luxury: '奢华型',
+};
+
+export const FRAME_MATERIAL_PRICING: FrameMaterialPricing[] = [
+  { material: 'wood', grade: 'economy', pricePerMeter: 80, widthOptions: [3, 4, 5], description: '松木材质，适合批量展览' },
+  { material: 'wood', grade: 'standard', pricePerMeter: 150, widthOptions: [4, 5, 6], description: '胡桃木或橡木，质量稳定' },
+  { material: 'wood', grade: 'premium', pricePerMeter: 280, widthOptions: [5, 6, 8], description: '珍贵实木，手工打磨' },
+  { material: 'wood', grade: 'luxury', pricePerMeter: 500, widthOptions: [6, 8, 10], description: '定制高端实木，雕花工艺' },
+  { material: 'metal', grade: 'economy', pricePerMeter: 60, widthOptions: [2, 3, 4], description: '铝合金材质，轻便耐用' },
+  { material: 'metal', grade: 'standard', pricePerMeter: 120, widthOptions: [3, 4, 5], description: '拉丝铝合金，质感细腻' },
+  { material: 'metal', grade: 'premium', pricePerMeter: 220, widthOptions: [4, 5, 6], description: '不锈钢材质，镜面抛光' },
+  { material: 'metal', grade: 'luxury', pricePerMeter: 400, widthOptions: [5, 6, 8], description: '钛金属，航空级品质' },
+  { material: 'gold', grade: 'standard', pricePerMeter: 200, widthOptions: [4, 5, 6], description: '金色喷涂，古典风格' },
+  { material: 'gold', grade: 'premium', pricePerMeter: 350, widthOptions: [5, 6, 8], description: '金色电镀，持久保色' },
+  { material: 'gold', grade: 'luxury', pricePerMeter: 600, widthOptions: [6, 8, 10], description: '24K金箔贴金，奢华典藏' },
+  { material: 'silver', grade: 'standard', pricePerMeter: 180, widthOptions: [4, 5, 6], description: '银色喷涂，现代简约' },
+  { material: 'silver', grade: 'premium', pricePerMeter: 320, widthOptions: [5, 6, 8], description: '镀银工艺，光亮如镜' },
+  { material: 'silver', grade: 'luxury', pricePerMeter: 550, widthOptions: [6, 8, 10], description: '纯银镀层，收藏级品质' },
+  { material: 'none', grade: 'economy', pricePerMeter: 20, widthOptions: [0], description: '无框装裱，仅画布处理' },
+  { material: 'none', grade: 'standard', pricePerMeter: 40, widthOptions: [0], description: '无框装裱，专业画布处理' },
+];
+
+export const GLASS_TYPES: GlassType[] = [
+  { id: 'regular', name: '普通玻璃', pricePerSquareMeter: 80, uvProtection: 0, antiGlare: false, description: '标准透明玻璃' },
+  { id: 'uv', name: '防紫外线玻璃', pricePerSquareMeter: 180, uvProtection: 99, antiGlare: false, description: '阻挡99%紫外线，保护艺术品' },
+  { id: 'museum', name: '博物馆级玻璃', pricePerSquareMeter: 350, uvProtection: 99, antiGlare: true, description: '防眩光+防紫外线，专业博物馆标准' },
+  { id: 'acrylic', name: '亚克力板', pricePerSquareMeter: 120, uvProtection: 90, antiGlare: false, description: '轻便安全，适合运输' },
+  { id: 'none', name: '无玻璃', pricePerSquareMeter: 0, uvProtection: 0, antiGlare: false, description: '不使用玻璃，直接展示' },
+];
+
+export const MAT_BOARDS: MatBoard[] = [
+  { id: 'white', name: '白色卡纸', color: '#FFFFFF', pricePerSquareMeter: 50, thickness: 1.5, acidFree: false, description: '标准白色卡纸' },
+  { id: 'cream', name: '米白卡纸', color: '#FFFDD0', pricePerSquareMeter: 60, thickness: 1.5, acidFree: false, description: '温暖米白色' },
+  { id: 'black', name: '黑色卡纸', color: '#1a1a1a', pricePerSquareMeter: 60, thickness: 1.5, acidFree: false, description: '经典黑色' },
+  { id: 'acid-free-white', name: '无酸白纸', color: '#FFFFFF', pricePerSquareMeter: 120, thickness: 2, acidFree: true, description: '博物馆级无酸卡纸，永久保存' },
+  { id: 'acid-free-cream', name: '无酸米白', color: '#FFFDD0', pricePerSquareMeter: 130, thickness: 2, acidFree: true, description: '无酸材质，适合长期收藏' },
+  { id: 'none', name: '无卡纸', color: 'transparent', pricePerSquareMeter: 0, thickness: 0, acidFree: false, description: '不使用卡纸' },
+];
+
+export const LIGHTING_EQUIPMENT: LightingEquipment[] = [
+  {
+    id: 'spot-economy',
+    name: '经济型LED轨道射灯',
+    type: 'spotlight',
+    brand: '国产品牌',
+    model: 'LED-SPOT-10W',
+    pricePerUnit: 280,
+    power: 10,
+    colorTemperatureRange: [3000, 5000],
+    beamAngleRange: [15, 45],
+    lifespan: 30000,
+    description: '基础款LED射灯，适合临时展览',
+  },
+  {
+    id: 'spot-standard',
+    name: '标准型LED轨道射灯',
+    type: 'spotlight',
+    brand: '飞利浦',
+    model: 'ST-30',
+    pricePerUnit: 680,
+    power: 30,
+    colorTemperatureRange: [2700, 6500],
+    beamAngleRange: [10, 60],
+    lifespan: 50000,
+    description: '高品质LED，显色指数Ra>95',
+  },
+  {
+    id: 'spot-premium',
+    name: '专业级博物馆射灯',
+    type: 'spotlight',
+    brand: 'ERCO',
+    model: 'Museum-Spot-50W',
+    pricePerUnit: 2500,
+    power: 50,
+    colorTemperatureRange: [2700, 5700],
+    beamAngleRange: [8, 80],
+    lifespan: 60000,
+    description: '德国专业博物馆级，精确控光，紫外线过滤',
+  },
+  {
+    id: 'flood-economy',
+    name: '经济型LED泛光灯',
+    type: 'floodlight',
+    brand: '国产品牌',
+    model: 'LED-FLOOD-20W',
+    pricePerUnit: 350,
+    power: 20,
+    colorTemperatureRange: [3000, 5000],
+    beamAngleRange: [60, 120],
+    lifespan: 30000,
+    description: '基础款LED泛光灯，均匀照明',
+  },
+  {
+    id: 'flood-standard',
+    name: '标准型LED泛光灯',
+    type: 'floodlight',
+    brand: '飞利浦',
+    model: 'FL-50',
+    pricePerUnit: 850,
+    power: 50,
+    colorTemperatureRange: [2700, 6500],
+    beamAngleRange: [40, 120],
+    lifespan: 50000,
+    description: '高品质泛光照明，均匀无暗区',
+  },
+  {
+    id: 'ambient-standard',
+    name: '标准环境照明',
+    type: 'ambient',
+    brand: '欧普',
+    model: 'AMBIENT-40W',
+    pricePerUnit: 450,
+    power: 40,
+    colorTemperatureRange: [3000, 6000],
+    beamAngleRange: [120, 180],
+    lifespan: 40000,
+    description: '均匀环境照明，营造舒适观展氛围',
+  },
+  {
+    id: 'ambient-premium',
+    name: '专业环境照明系统',
+    type: 'ambient',
+    brand: 'ERCO',
+    model: 'Ambient-Pro-60W',
+    pricePerUnit: 1800,
+    power: 60,
+    colorTemperatureRange: [2700, 6500],
+    beamAngleRange: [90, 180],
+    lifespan: 60000,
+    description: '专业级环境光，无缝拼接，无级调光',
+  },
+];
+
+export const CONSTRUCTION_ITEMS: ConstructionItem[] = [
+  { id: 'wall-paint', name: '墙面刷漆', category: 'wall', unit: 'squareMeter', unitPrice: 80, description: '墙面清理+底漆+面漆' },
+  { id: 'wall-paper', name: '墙布铺贴', category: 'wall', unit: 'squareMeter', unitPrice: 150, description: '专业展览墙布' },
+  { id: 'wall-panel', name: '木饰面板', category: 'wall', unit: 'squareMeter', unitPrice: 350, description: '高密度木饰面板' },
+  { id: 'track-install', name: '轨道安装', category: 'electrical', unit: 'meter', unitPrice: 120, description: '三线轨道含配件' },
+  { id: 'wiring', name: '电路改造', category: 'electrical', unit: 'meter', unitPrice: 80, description: '国标铜线+穿管' },
+  { id: 'mounting-artwork', name: '作品装挂', category: 'labor', unit: 'item', unitPrice: 150, description: '专业挂钩+水平调整' },
+  { id: 'install-lighting', name: '灯具安装调试', category: 'labor', unit: 'item', unitPrice: 100, description: '灯具安装+角度调试' },
+  { id: 'technician', name: '技术工人', category: 'labor', unit: 'personDay', unitPrice: 600, description: '持证电工/木工' },
+  { id: 'curator', name: '策展顾问', category: 'labor', unit: 'personDay', unitPrice: 1500, description: '专业策展指导' },
+  { id: 'transport-small', name: '小型运输', category: 'transport', unit: 'item', unitPrice: 300, description: '市内小型货车' },
+  { id: 'transport-large', name: '大型运输', category: 'transport', unit: 'item', unitPrice: 800, description: '专业艺术品运输车' },
+  { id: 'packing', name: '专业包装', category: 'other', unit: 'item', unitPrice: 200, description: '防震+防潮+定制木箱' },
+  { id: 'insurance', name: '运输保险', category: 'other', unit: 'item', unitPrice: 500, description: '艺术品运输保险' },
+  { id: 'cleaning', name: '现场清洁', category: 'other', unit: 'squareMeter', unitPrice: 15, description: '展后清洁复原' },
+];
+
+export const DEFAULT_WALL_MATERIAL_PRICES: Record<WallMaterial, number> = {
+  matte: 80,
+  satin: 100,
+  glossy: 120,
+  concrete: 200,
+};
+
+export const DEFAULT_QUOTATION_CONFIG: QuotationConfig = {
+  defaultFrameGrade: 'standard',
+  defaultFrameWidth: 5,
+  defaultMatBorderWidth: 8,
+  defaultGlassType: 'uv',
+  defaultSpotlightType: 'spot-standard',
+  defaultAmbientLightType: 'ambient-standard',
+  defaultWallMaterialPrice: DEFAULT_WALL_MATERIAL_PRICES,
+  trackLightingPricePerMeter: 150,
+  taxRate: 0.13,
+  currency: 'CNY',
+};
+
+export const QUOTATION_STATUS_LABELS: Record<ExhibitionQuotation['status'], string> = {
+  draft: '草稿',
+  finalized: '已确认',
+  sent: '已发送',
+  approved: '已批准',
+  rejected: '已驳回',
+};
+
+export const QUOTATION_STATUS_COLORS: Record<ExhibitionQuotation['status'], string> = {
+  draft: 'bg-gray-500',
+  finalized: 'bg-blue-500',
+  sent: 'bg-yellow-500',
+  approved: 'bg-green-500',
+  rejected: 'bg-red-500',
+};
+
+export const CONSTRUCTION_CATEGORY_LABELS: Record<ConstructionItem['category'], string> = {
+  wall: '墙面工程',
+  floor: '地面工程',
+  ceiling: '天花工程',
+  electrical: '电气工程',
+  labor: '人工费用',
+  transport: '运输费用',
+  other: '其他费用',
+};
+
+export const CONSTRUCTION_UNIT_LABELS: Record<ConstructionItem['unit'], string> = {
+  item: '件',
+  meter: '米',
+  squareMeter: '平方米',
+  hour: '小时',
+  personDay: '人天',
+};
