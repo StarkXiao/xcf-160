@@ -21,6 +21,17 @@ import {
   DEFAULT_WALL_POSITION,
   DEFAULT_LIGHTING_STRATEGY,
   DEFAULT_PROJECT,
+  DEFAULT_EXPORT_CONFIG,
+  DEFAULT_PROGRESS_STEPS,
+  EXPORT_FORMAT_LABELS,
+} from '../types';
+import type {
+  ArtworkGroup,
+  ProgressStep,
+  ProgressStatus,
+  VersionComment,
+  ExportConfig,
+  CuratorHubTab,
 } from '../types';
 import { mockArtworks, mockGallerySchemes, mockCuratorProjects } from '../data/mockData';
 import {
@@ -97,6 +108,25 @@ interface AppStore extends AppState {
   exportProject: (id: string) => void;
   importProject: (data: ProjectExportData) => void;
   openProject: (projectId: string) => void;
+  setCuratorHubTab: (tab: CuratorHubTab) => void;
+  setSelectedGroupId: (id: string | null) => void;
+  setSelectedVersionId: (id: string | null) => void;
+  createGroup: (schemeId: string, name: string, color: string, description?: string) => void;
+  updateGroup: (schemeId: string, groupId: string, updates: Partial<ArtworkGroup>) => void;
+  deleteGroup: (schemeId: string, groupId: string) => void;
+  addArtworksToGroup: (schemeId: string, groupId: string, artworkIds: string[]) => void;
+  removeArtworksFromGroup: (schemeId: string, groupId: string, artworkIds: string[]) => void;
+  reorderGroups: (schemeId: string, groupIds: string[]) => void;
+  updateProgressStep: (projectId: string, stepId: string, updates: Partial<ProgressStep>) => void;
+  setProgressStepStatus: (projectId: string, stepId: string, status: ProgressStatus) => void;
+  addProgressStep: (projectId: string, step: Omit<ProgressStep, 'id'>) => void;
+  removeProgressStep: (projectId: string, stepId: string) => void;
+  reorderProgressSteps: (projectId: string, stepIds: string[]) => void;
+  recalculateProgress: (projectId: string) => void;
+  addVersionComment: (projectId: string, versionId: string, author: string, content: string) => void;
+  deleteVersionComment: (projectId: string, commentId: string) => void;
+  compareVersions: (projectId: string, versionId1: string, versionId2: string) => { version1: ProjectVersion; version2: ProjectVersion; differences: string[] } | null;
+  exportProjectPreview: (projectId: string, config: ExportConfig) => void;
 }
 
 const getInitialState = (): AppState => {
@@ -133,6 +163,9 @@ const getInitialState = (): AppState => {
     currentProjectId,
     projectViewTab: 'projects',
     showCuratorHub: false,
+    curatorHubTab: 'overview',
+    selectedGroupId: null,
+    selectedVersionId: null,
   };
 };
 
@@ -250,6 +283,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       wallArtworks: [],
       lightingStrategy: { ...DEFAULT_LIGHTING_STRATEGY },
       wallMaterial: 'matte',
+      groups: [],
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
@@ -633,6 +667,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       wallArtworks: [],
       lightingStrategy: { ...DEFAULT_LIGHTING_STRATEGY },
       wallMaterial: 'matte',
+      groups: [],
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
@@ -1012,5 +1047,389 @@ export const useAppStore = create<AppStore>((set, get) => ({
     saveCurrentProjectId(projectId);
     if (project.currentSchemeId) saveCurrentSchemeId(project.currentSchemeId);
     saveAppMode('curator');
+  },
+
+  setCuratorHubTab: (tab) => set({ curatorHubTab: tab }),
+
+  setSelectedGroupId: (id) => set({ selectedGroupId: id }),
+
+  setSelectedVersionId: (id) => set({ selectedVersionId: id }),
+
+  createGroup: (schemeId, name, color, description) => {
+    const newGroup: ArtworkGroup = {
+      id: `group-${Date.now()}`,
+      name,
+      color,
+      description,
+      artworkIds: [],
+      order: get().gallerySchemes.find(s => s.id === schemeId)?.groups.length || 0,
+    };
+
+    set((state) => ({
+      gallerySchemes: state.gallerySchemes.map((s) =>
+        s.id === schemeId
+          ? { ...s, groups: [...s.groups, newGroup], updatedAt: Date.now() }
+          : s
+      ),
+    }));
+    saveGallerySchemes(get().gallerySchemes);
+  },
+
+  updateGroup: (schemeId, groupId, updates) => {
+    set((state) => ({
+      gallerySchemes: state.gallerySchemes.map((s) =>
+        s.id === schemeId
+          ? {
+              ...s,
+              groups: s.groups.map((g) =>
+                g.id === groupId ? { ...g, ...updates } : g
+              ),
+              updatedAt: Date.now(),
+            }
+          : s
+      ),
+    }));
+    saveGallerySchemes(get().gallerySchemes);
+  },
+
+  deleteGroup: (schemeId, groupId) => {
+    set((state) => ({
+      gallerySchemes: state.gallerySchemes.map((s) =>
+        s.id === schemeId
+          ? {
+              ...s,
+              groups: s.groups.filter((g) => g.id !== groupId),
+              updatedAt: Date.now(),
+            }
+          : s
+      ),
+    }));
+    saveGallerySchemes(get().gallerySchemes);
+  },
+
+  addArtworksToGroup: (schemeId, groupId, artworkIds) => {
+    set((state) => ({
+      gallerySchemes: state.gallerySchemes.map((s) =>
+        s.id === schemeId
+          ? {
+              ...s,
+              groups: s.groups.map((g) =>
+                g.id === groupId
+                  ? { ...g, artworkIds: [...new Set([...g.artworkIds, ...artworkIds])] }
+                  : g
+              ),
+              updatedAt: Date.now(),
+            }
+          : s
+      ),
+    }));
+    saveGallerySchemes(get().gallerySchemes);
+  },
+
+  removeArtworksFromGroup: (schemeId, groupId, artworkIds) => {
+    set((state) => ({
+      gallerySchemes: state.gallerySchemes.map((s) =>
+        s.id === schemeId
+          ? {
+              ...s,
+              groups: s.groups.map((g) =>
+                g.id === groupId
+                  ? { ...g, artworkIds: g.artworkIds.filter((id) => !artworkIds.includes(id)) }
+                  : g
+              ),
+              updatedAt: Date.now(),
+            }
+          : s
+      ),
+    }));
+    saveGallerySchemes(get().gallerySchemes);
+  },
+
+  reorderGroups: (schemeId, groupIds) => {
+    set((state) => ({
+      gallerySchemes: state.gallerySchemes.map((s) =>
+        s.id === schemeId
+          ? {
+              ...s,
+              groups: groupIds.map((id, index) => {
+                const group = s.groups.find((g) => g.id === id);
+                return group ? { ...group, order: index } : group!;
+              }),
+              updatedAt: Date.now(),
+            }
+          : s
+      ),
+    }));
+    saveGallerySchemes(get().gallerySchemes);
+  },
+
+  updateProgressStep: (projectId, stepId, updates) => {
+    set((state) => ({
+      curatorProjects: state.curatorProjects.map((p) =>
+        p.id === projectId
+          ? {
+              ...p,
+              progress: {
+                ...p.progress,
+                steps: p.progress.steps.map((s) =>
+                  s.id === stepId ? { ...s, ...updates } : s
+                ),
+              },
+              updatedAt: Date.now(),
+            }
+          : p
+      ),
+    }));
+    get().recalculateProgress(projectId);
+    saveCuratorProjects(get().curatorProjects);
+  },
+
+  setProgressStepStatus: (projectId, stepId, status) => {
+    const updates: Partial<ProgressStep> = { status };
+    if (status === 'completed') {
+      updates.completedAt = Date.now();
+    } else {
+      updates.completedAt = undefined;
+    }
+    get().updateProgressStep(projectId, stepId, updates);
+  },
+
+  addProgressStep: (projectId, step) => {
+    const newStep: ProgressStep = {
+      ...step,
+      id: `step-${Date.now()}`,
+    };
+
+    set((state) => ({
+      curatorProjects: state.curatorProjects.map((p) =>
+        p.id === projectId
+          ? {
+              ...p,
+              progress: {
+                ...p.progress,
+                steps: [...p.progress.steps, newStep],
+              },
+              updatedAt: Date.now(),
+            }
+          : p
+      ),
+    }));
+    get().recalculateProgress(projectId);
+    saveCuratorProjects(get().curatorProjects);
+  },
+
+  removeProgressStep: (projectId, stepId) => {
+    set((state) => ({
+      curatorProjects: state.curatorProjects.map((p) =>
+        p.id === projectId
+          ? {
+              ...p,
+              progress: {
+                ...p.progress,
+                steps: p.progress.steps.filter((s) => s.id !== stepId),
+              },
+              updatedAt: Date.now(),
+            }
+          : p
+      ),
+    }));
+    get().recalculateProgress(projectId);
+    saveCuratorProjects(get().curatorProjects);
+  },
+
+  reorderProgressSteps: (projectId, stepIds) => {
+    set((state) => ({
+      curatorProjects: state.curatorProjects.map((p) =>
+        p.id === projectId
+          ? {
+              ...p,
+              progress: {
+                ...p.progress,
+                steps: stepIds.map((id, index) => {
+                  const step = p.progress.steps.find((s) => s.id === id);
+                  return step ? { ...step, order: index } : step!;
+                }),
+              },
+              updatedAt: Date.now(),
+            }
+          : p
+      ),
+    }));
+    saveCuratorProjects(get().curatorProjects);
+  },
+
+  recalculateProgress: (projectId) => {
+    const project = get().curatorProjects.find((p) => p.id === projectId);
+    if (!project || project.progress.steps.length === 0) return;
+
+    const completedSteps = project.progress.steps.filter(
+      (s) => s.status === 'completed'
+    ).length;
+    const overallProgress = Math.round((completedSteps / project.progress.steps.length) * 100);
+
+    set((state) => ({
+      curatorProjects: state.curatorProjects.map((p) =>
+        p.id === projectId
+          ? {
+              ...p,
+              progress: {
+                ...p.progress,
+                overallProgress,
+              },
+              status:
+                overallProgress === 100
+                  ? 'completed'
+                  : overallProgress > 0
+                    ? 'in_progress'
+                    : p.status,
+            }
+          : p
+      ),
+    }));
+  },
+
+  addVersionComment: (projectId, versionId, author, content) => {
+    const comment: VersionComment = {
+      id: `comment-${Date.now()}`,
+      versionId,
+      author,
+      content,
+      createdAt: Date.now(),
+    };
+
+    set((state) => ({
+      curatorProjects: state.curatorProjects.map((p) =>
+        p.id === projectId
+          ? {
+              ...p,
+              versionComments: [...p.versionComments, comment],
+              updatedAt: Date.now(),
+            }
+          : p
+      ),
+    }));
+    saveCuratorProjects(get().curatorProjects);
+  },
+
+  deleteVersionComment: (projectId, commentId) => {
+    set((state) => ({
+      curatorProjects: state.curatorProjects.map((p) =>
+        p.id === projectId
+          ? {
+              ...p,
+              versionComments: p.versionComments.filter((c) => c.id !== commentId),
+              updatedAt: Date.now(),
+            }
+          : p
+      ),
+    }));
+    saveCuratorProjects(get().curatorProjects);
+  },
+
+  compareVersions: (projectId, versionId1, versionId2) => {
+    const project = get().curatorProjects.find((p) => p.id === projectId);
+    if (!project) return null;
+
+    const version1 = project.versions.find((v) => v.id === versionId1);
+    const version2 = project.versions.find((v) => v.id === versionId2);
+    if (!version1 || !version2) return null;
+
+    const differences: string[] = [];
+
+    if (version1.scheme.wallArtworks.length !== version2.scheme.wallArtworks.length) {
+      differences.push(
+        `作品数量: ${version1.scheme.wallArtworks.length} → ${version2.scheme.wallArtworks.length}`
+      );
+    }
+
+    if (version1.scheme.lightingStrategy.mode !== version2.scheme.lightingStrategy.mode) {
+      differences.push(
+        `灯光策略: ${version1.scheme.lightingStrategy.mode} → ${version2.scheme.lightingStrategy.mode}`
+      );
+    }
+
+    if (version1.scheme.wallMaterial !== version2.scheme.wallMaterial) {
+      differences.push(
+        `墙面材质: ${version1.scheme.wallMaterial} → ${version2.scheme.wallMaterial}`
+      );
+    }
+
+    const artworkIds1 = new Set(version1.scheme.wallArtworks.map((w) => w.artworkId));
+    const artworkIds2 = new Set(version2.scheme.wallArtworks.map((w) => w.artworkId));
+
+    const added = [...artworkIds2].filter((id) => !artworkIds1.has(id));
+    const removed = [...artworkIds1].filter((id) => !artworkIds2.has(id));
+
+    if (added.length > 0) {
+      differences.push(`新增作品: ${added.length} 件`);
+    }
+    if (removed.length > 0) {
+      differences.push(`移除作品: ${removed.length} 件`);
+    }
+
+    return { version1, version2, differences };
+  },
+
+  exportProjectPreview: (projectId, config) => {
+    const { curatorProjects, gallerySchemes, artworks } = get();
+    const project = curatorProjects.find((p) => p.id === projectId);
+    if (!project) return;
+
+    const projectSchemes = gallerySchemes.filter((s) => project.schemeIds.includes(s.id));
+
+    const exportData = {
+      project: {
+        name: project.name,
+        description: project.description,
+        status: project.status,
+        tags: project.tags,
+        progress: project.progress.overallProgress,
+      },
+      schemes: projectSchemes.map((scheme) => ({
+        name: scheme.name,
+        description: scheme.description,
+        wallMaterial: scheme.wallMaterial,
+        lightingStrategy: scheme.lightingStrategy,
+        groups: config.includeArtworkInfo ? scheme.groups : undefined,
+        artworks: config.includeArtworkInfo
+          ? scheme.wallArtworks.map((wa) => {
+              const artwork = artworks.find((a) => a.id === wa.artworkId);
+              return {
+                title: artwork?.title,
+                artist: artwork?.artist,
+                year: artwork?.year,
+                medium: artwork?.medium,
+                position: wa.position,
+                lighting: config.includeLightingSpec ? wa.lighting : undefined,
+                material: config.includeLightingSpec ? wa.material : undefined,
+              };
+            })
+          : scheme.wallArtworks.length,
+      })),
+      versions: project.versions.map((v) => ({
+        name: v.name,
+        description: v.description,
+        createdAt: v.createdAt,
+        createdBy: v.createdBy,
+      })),
+      exportTime: Date.now(),
+      resolution: config.resolution,
+    };
+
+    if (config.format === 'json') {
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+        type: 'application/json',
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${project.name.replace(/\s+/g, '_')}_preview.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } else {
+      alert(`${EXPORT_FORMAT_LABELS[config.format]} 格式导出功能正在开发中，当前仅支持 JSON 格式`);
+    }
   },
 }));

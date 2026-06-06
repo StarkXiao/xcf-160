@@ -15,7 +15,6 @@ import {
   Clock,
   Sparkles,
   FolderOpen,
-  Camera,
   Play,
   Archive,
   FileText,
@@ -26,14 +25,32 @@ import {
   ArrowLeft,
   Save,
   Layers,
+  Home,
+  Users,
+  TrendingUp,
+  GitCompare,
+  Eye,
+  AlertCircle,
+  TrendingUp as TrendingUpIcon,
+  Package,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import {
   importScheme as importSchemeUtil,
   importProject as importProjectUtil,
 } from '../../utils/storage';
-import type { GalleryScheme, CuratorProject, ProjectViewTab } from '../../types';
-import { PROJECT_VIEW_TABS, PROJECT_STATUS_LABELS } from '../../types';
+import type { GalleryScheme, CuratorProject, ProjectViewTab, CuratorHubTab } from '../../types';
+import {
+  PROJECT_VIEW_TABS,
+  PROJECT_STATUS_LABELS,
+  CURATOR_HUB_TABS,
+  PROGRESS_STATUS_COLORS,
+  PROGRESS_STATUS_LABELS,
+} from '../../types';
+import { ArtworkGroupManager } from '../ArtworkGroupManager/ArtworkGroupManager';
+import { ProgressTracker } from '../ProgressTracker/ProgressTracker';
+import { VersionManager } from '../VersionManager/VersionManager';
+import { ExportPreview } from '../ExportPreview/ExportPreview';
 
 interface CuratorHubProps {
   onClose: () => void;
@@ -46,6 +63,8 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
     curatorProjects,
     currentProjectId,
     projectViewTab,
+    curatorHubTab,
+    showCuratorHub,
     createScheme,
     deleteScheme,
     duplicateScheme,
@@ -56,6 +75,8 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
     setAppMode,
     setActivePanel,
     setProjectViewTab,
+    setCuratorHubTab,
+    setCurrentProject,
     createProject,
     deleteProject,
     updateProject,
@@ -66,23 +87,19 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
     exportProject,
     importProject,
     openProject,
+    curatorProjects: projects,
+    artworks,
   } = useAppStore();
 
   const [showCreateProjectDialog, setShowCreateProjectDialog] = useState(false);
   const [showCreateSchemeDialog, setShowCreateSchemeDialog] = useState(false);
-  const [showVersionDialog, setShowVersionDialog] = useState(false);
-  const [selectedProjectForVersion, setSelectedProjectForVersion] = useState<string | null>(null);
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDescription, setNewProjectDescription] = useState('');
   const [newProjectTags, setNewProjectTags] = useState('');
   const [newSchemeName, setNewSchemeName] = useState('');
   const [newSchemeDescription, setNewSchemeDescription] = useState('');
-  const [newVersionName, setNewVersionName] = useState('');
-  const [newVersionDescription, setNewVersionDescription] = useState('');
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
-  const [viewingProjectId, setViewingProjectId] = useState<string | null>(null);
-  const [showVersionHistory, setShowVersionHistory] = useState(false);
   const projectFileInputRef = useRef<HTMLInputElement>(null);
   const schemeFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -91,15 +108,32 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
     [curatorProjects, currentProjectId]
   );
 
-  const viewingProject = useMemo(
-    () => curatorProjects.find((p) => p.id === viewingProjectId) || null,
-    [curatorProjects, viewingProjectId]
+  const currentScheme = useMemo(
+    () => gallerySchemes.find((s) => s.id === currentSchemeId) || null,
+    [gallerySchemes, currentSchemeId]
   );
 
-  const viewingProjectSchemes = useMemo(
-    () => gallerySchemes.filter((s) => viewingProject?.schemeIds.includes(s.id)),
-    [gallerySchemes, viewingProject]
-  );
+  const projectSchemes = useMemo(() => {
+    if (!currentProject) return [];
+    return gallerySchemes.filter((s) => currentProject.schemeIds.includes(s.id));
+  }, [currentProject, gallerySchemes]);
+
+  const totalArtworks = useMemo(() => {
+    return projectSchemes.reduce(
+      (sum, scheme) => sum + scheme.wallArtworks.length,
+      0
+    );
+  }, [projectSchemes]);
+
+  const completedSteps = useMemo(() => {
+    return currentProject?.progress.steps.filter(
+      (s) => s.status === 'completed'
+    ).length || 0;
+  }, [currentProject]);
+
+  const totalSteps = useMemo(() => {
+    return currentProject?.progress.steps.length || 0;
+  }, [currentProject]);
 
   const handleCreateProject = () => {
     if (!newProjectName.trim()) return;
@@ -122,9 +156,6 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
     const project = curatorProjects.find((p) => p.id === id);
     if (project && confirm(`确定要删除项目"${project.name}"吗？这将同时删除项目下的所有方案和版本。`)) {
       deleteProject(id);
-      if (viewingProjectId === id) {
-        setViewingProjectId(null);
-      }
     }
   };
 
@@ -136,10 +167,10 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
   };
 
   const handleCreateScheme = () => {
-    if (!newSchemeName.trim() || !viewingProjectId) return;
+    if (!newSchemeName.trim() || !currentProjectId) return;
     const newScheme = createScheme(newSchemeName.trim(), newSchemeDescription.trim() || undefined);
     if (newScheme) {
-      useAppStore.getState().addSchemeToProject(viewingProjectId, newScheme.id);
+      useAppStore.getState().addSchemeToProject(currentProjectId, newScheme.id);
     }
     setNewSchemeName('');
     setNewSchemeDescription('');
@@ -166,8 +197,8 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
     try {
       const scheme = await importSchemeUtil(file);
       const newScheme = importScheme(scheme);
-      if (newScheme && viewingProjectId) {
-        useAppStore.getState().addSchemeToProject(viewingProjectId, newScheme.id);
+      if (newScheme && currentProjectId) {
+        useAppStore.getState().addSchemeToProject(currentProjectId, newScheme.id);
       }
     } catch (err) {
       alert('导入失败：无效的方案文件');
@@ -205,30 +236,9 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
     onClose();
   };
 
-  const handleSaveVersion = () => {
-    if (!selectedProjectForVersion || !newVersionName.trim()) return;
-    saveProjectVersion(selectedProjectForVersion, newVersionName.trim(), newVersionDescription.trim() || undefined);
-    setNewVersionName('');
-    setNewVersionDescription('');
-    setShowVersionDialog(false);
-    setSelectedProjectForVersion(null);
-  };
-
-  const handleOpenVersionDialog = (projectId: string) => {
-    setSelectedProjectForVersion(projectId);
-    setShowVersionDialog(true);
-  };
-
-  const handleLoadVersion = (projectId: string, versionId: string) => {
-    if (confirm('确定要恢复此版本吗？将创建一个新的方案。')) {
-      loadProjectVersion(projectId, versionId);
-    }
-  };
-
-  const handleDeleteVersion = (projectId: string, versionId: string) => {
-    if (confirm('确定要删除此版本吗？此操作不可撤销。')) {
-      deleteProjectVersion(projectId, versionId);
-    }
+  const handleOpenProject = (projectId: string) => {
+    openProject(projectId);
+    setCuratorHubTab('overview');
   };
 
   const getStatusColor = (status: CuratorProject['status']) => {
@@ -238,6 +248,16 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
       case 'completed': return 'bg-green-500/20 text-green-300';
       case 'archived': return 'bg-purple-500/20 text-purple-300';
       default: return 'bg-gray-500/20 text-gray-300';
+    }
+  };
+
+  const getStatusDotColor = (status: CuratorProject['status']) => {
+    switch (status) {
+      case 'draft': return 'bg-gray-500';
+      case 'in_progress': return 'bg-blue-500';
+      case 'completed': return 'bg-green-500';
+      case 'archived': return 'bg-purple-500';
+      default: return 'bg-gray-500';
     }
   };
 
@@ -268,6 +288,7 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
     const isCurrent = project.id === currentProjectId;
     const schemeCount = project.schemeIds.length;
     const versionCount = project.versions.length;
+    const progress = project.progress.overallProgress;
 
     return (
       <motion.div
@@ -278,10 +299,7 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
         exit={{ opacity: 0, scale: 0.95 }}
         transition={{ duration: 0.2 }}
         className="card p-4 hover:border-gold/50 transition-all cursor-pointer group"
-        onClick={() => {
-          setViewingProjectId(project.id);
-          setShowVersionHistory(false);
-        }}
+        onClick={() => handleOpenProject(project.id)}
       >
         <div className="aspect-video bg-gallery-bg rounded-lg mb-3 overflow-hidden relative group">
           <div className="absolute inset-0 flex items-center justify-center">
@@ -309,9 +327,7 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
                   >
                     <div className="w-full h-full bg-gallery-surface/50 flex items-center justify-center">
                       {scheme.wallArtworks.slice(0, 4).map((wa, i) => {
-                        const artwork = useAppStore
-                          .getState()
-                          .artworks.find((a) => a.id === wa.artworkId);
+                        const artwork = artworks.find((a) => a.id === wa.artworkId);
                         if (!artwork) return null;
 
                         const smallCols = 2;
@@ -358,7 +374,7 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
             <div className="flex items-center gap-2 px-3 py-1.5 bg-gold text-gallery-bg rounded-full text-xs font-medium">
               <ChevronRight className="w-3.5 h-3.5" />
-              查看项目
+              进入项目
             </div>
           </div>
 
@@ -371,6 +387,15 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
           <div className={`absolute top-2 left-2 px-2 py-0.5 text-xs font-medium rounded ${getStatusColor(project.status)}`}>
             {PROJECT_STATUS_LABELS[project.status]}
           </div>
+
+          {progress > 0 && (
+            <div className="absolute bottom-0 left-0 right-0 h-1 bg-gallery-bg">
+              <div
+                className="h-full bg-gold transition-all"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          )}
         </div>
 
         <div className="flex items-start justify-between gap-2 mb-2">
@@ -496,6 +521,10 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
               <History className="w-3 h-3" />
               <span>{versionCount} 版本</span>
             </div>
+            <div className="flex items-center gap-1">
+              <TrendingUp className="w-3 h-3" />
+              <span>{progress}%</span>
+            </div>
           </div>
           <div className="flex items-center gap-1">
             <Clock className="w-3 h-3" />
@@ -506,7 +535,7 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
     );
   };
 
-  const renderSchemeCard = (scheme: GalleryScheme, isSnapshot = false) => {
+  const renderSchemeCard = (scheme: GalleryScheme) => {
     const isCurrent = scheme.id === currentSchemeId;
 
     return (
@@ -524,9 +553,7 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="relative w-full h-full p-1.5">
               {scheme.wallArtworks.slice(0, 6).map((wa, index) => {
-                const artwork = useAppStore
-                  .getState()
-                  .artworks.find((a) => a.id === wa.artworkId);
+                const artwork = artworks.find((a) => a.id === wa.artworkId);
                 if (!artwork) return null;
 
                 const total = scheme.wallArtworks.length;
@@ -570,7 +597,7 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
             <div className="flex items-center gap-1.5 px-2.5 py-1 bg-gold text-gallery-bg rounded-full text-xs font-medium">
               <Play className="w-3 h-3" />
-              打开
+              打开编辑
             </div>
           </div>
 
@@ -612,6 +639,23 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
           </div>
         </div>
 
+        {scheme.groups.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-1.5">
+            {scheme.groups.slice(0, 3).map((group) => (
+              <span
+                key={group.id}
+                className="px-1.5 py-0.5 text-xs rounded-full"
+                style={{
+                  backgroundColor: `${group.color}20`,
+                  color: group.color,
+                }}
+              >
+                {group.name}
+              </span>
+            ))}
+          </div>
+        )}
+
         <div className="flex items-center justify-between text-xs text-white/40">
           <div className="flex items-center gap-1">
             <Image className="w-2.5 h-2.5" />
@@ -623,75 +667,380 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
     );
   };
 
-  const renderVersionHistory = () => {
-    if (!viewingProject) return null;
+  const renderOverview = () => {
+    if (!currentProject) return null;
+
+    const recentSteps = [...currentProject.progress.steps]
+      .sort((a, b) => b.order - a.order)
+      .slice(0, 5);
+
+    const recentVersions = [...currentProject.versions]
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, 3);
 
     return (
-      <div className="space-y-3">
-        {viewingProject.versions.length === 0 ? (
-          <div className="text-center py-12">
-            <History className="w-12 h-12 mx-auto mb-4 text-white/20" />
-            <p className="text-white/50 text-sm">暂无版本记录</p>
-            <p className="text-white/30 text-xs mt-1">保存当前方案状态以创建版本</p>
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="space-y-6"
+      >
+        <div className="grid grid-cols-4 gap-4">
+          <div className="card p-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-lg bg-gold/20 flex items-center justify-center">
+                <Package className="w-5 h-5 text-gold" />
+              </div>
+              <div>
+                <p className="text-xs text-white/40">方案数量</p>
+                <p className="text-2xl font-bold text-white">{projectSchemes.length}</p>
+              </div>
+            </div>
+            <div className="h-1 bg-gallery-bg rounded-full overflow-hidden">
+              <div className="h-full bg-gold rounded-full" style={{ width: '60%' }} />
+            </div>
           </div>
-        ) : (
-          viewingProject.versions
-            .sort((a, b) => b.createdAt - a.createdAt)
-            .map((version) => (
-              <motion.div
-                key={version.id}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                className="card p-4 hover:border-gold/30 transition-all"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h4 className="font-medium text-white">{version.name}</h4>
-                      <span className="px-2 py-0.5 bg-gold/10 text-gold/70 text-xs rounded">
-                        v{version.id.split('-')[1]}
+
+          <div className="card p-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                <Image className="w-5 h-5 text-blue-400" />
+              </div>
+              <div>
+                <p className="text-xs text-white/40">作品总数</p>
+                <p className="text-2xl font-bold text-white">{totalArtworks}</p>
+              </div>
+            </div>
+            <div className="h-1 bg-gallery-bg rounded-full overflow-hidden">
+              <div className="h-full bg-blue-500 rounded-full" style={{ width: '75%' }} />
+            </div>
+          </div>
+
+          <div className="card p-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
+                <TrendingUpIcon className="w-5 h-5 text-green-400" />
+              </div>
+              <div>
+                <p className="text-xs text-white/40">完成进度</p>
+                <p className="text-2xl font-bold text-white">{currentProject.progress.overallProgress}%</p>
+              </div>
+            </div>
+            <div className="h-1 bg-gallery-bg rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all"
+                style={{
+                  width: `${currentProject.progress.overallProgress}%`,
+                  backgroundColor:
+                    currentProject.progress.overallProgress === 100
+                      ? '#22c55e'
+                      : currentProject.progress.overallProgress >= 50
+                      ? '#d4af37'
+                      : '#3b82f6',
+                }}
+              />
+            </div>
+          </div>
+
+          <div className="card p-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                <GitCompare className="w-5 h-5 text-purple-400" />
+              </div>
+              <div>
+                <p className="text-xs text-white/40">版本数量</p>
+                <p className="text-2xl font-bold text-white">{currentProject.versions.length}</p>
+              </div>
+            </div>
+            <div className="h-1 bg-gallery-bg rounded-full overflow-hidden">
+              <div className="h-full bg-purple-500 rounded-full" style={{ width: '45%' }} />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="card p-4">
+            <h4 className="text-sm font-medium text-white mb-4 flex items-center gap-2">
+              <TrendingUpIcon className="w-4 h-4 text-gold" />
+              布展进度概览
+            </h4>
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-white/60">总体进度</span>
+                <span className="text-sm font-medium text-white">
+                  {completedSteps} / {totalSteps} 步骤
+                </span>
+              </div>
+              <div className="h-3 bg-gallery-bg rounded-full overflow-hidden">
+                <motion.div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{
+                    width: `${currentProject.progress.overallProgress}%`,
+                    backgroundColor:
+                      currentProject.progress.overallProgress === 100
+                        ? '#22c55e'
+                        : currentProject.progress.overallProgress >= 50
+                        ? '#d4af37'
+                        : currentProject.progress.overallProgress > 0
+                        ? '#3b82f6'
+                        : '#6b7280',
+                  }}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              {recentSteps.map((step) => (
+                <div key={step.id} className="flex items-center gap-3 py-2">
+                  <div
+                    className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                      PROGRESS_STATUS_COLORS[step.status]
+                    }`}
+                  />
+                  <span className="text-sm text-white/70 flex-1 truncate">
+                    {step.name}
+                  </span>
+                  <span
+                    className="text-xs px-2 py-0.5 rounded-full"
+                    style={{
+                      backgroundColor: `${PROGRESS_STATUS_COLORS[step.status].replace('bg-', '')}20`,
+                      color: PROGRESS_STATUS_COLORS[step.status].replace('bg-', 'text-'),
+                    }}
+                  >
+                    {PROGRESS_STATUS_LABELS[step.status]}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => setCuratorHubTab('progress')}
+              className="w-full mt-4 py-2 text-sm text-gold hover:text-gold/80 transition-colors flex items-center justify-center gap-1"
+            >
+              查看完整进度 <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="card p-4">
+            <h4 className="text-sm font-medium text-white mb-4 flex items-center gap-2">
+              <GitCompare className="w-4 h-4 text-gold" />
+              最近版本
+            </h4>
+            {recentVersions.length === 0 ? (
+              <div className="text-center py-8">
+                <FileText className="w-10 h-10 mx-auto mb-3 text-white/20" />
+                <p className="text-sm text-white/40">暂无版本记录</p>
+                <button
+                  onClick={() => setCuratorHubTab('versions')}
+                  className="mt-3 text-xs text-gold hover:text-gold/80 transition-colors"
+                >
+                  保存第一个版本
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {recentVersions.map((version) => (
+                  <div key={version.id} className="p-3 bg-gallery-bg rounded-lg">
+                    <div className="flex items-center justify-between mb-1">
+                      <h5 className="text-sm font-medium text-white">{version.name}</h5>
+                      <span className="text-xs text-white/40">
+                        {formatRelativeTime(version.createdAt)}
                       </span>
                     </div>
                     {version.description && (
-                      <p className="text-sm text-white/50 mb-2">{version.description}</p>
+                      <p className="text-xs text-white/50 truncate mb-2">
+                        {version.description}
+                      </p>
                     )}
-                    <div className="flex items-center gap-4 text-xs text-white/40">
+                    <div className="flex items-center gap-3 text-xs text-white/40">
                       <span className="flex items-center gap-1">
                         <Image className="w-3 h-3" />
-                        {version.scheme.wallArtworks.length} 件作品
+                        {version.scheme.wallArtworks.length} 件
                       </span>
                       <span className="flex items-center gap-1">
-                        <Calendar className="w-3 h-3" />
-                        {formatDate(version.createdAt)}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <FileText className="w-3 h-3" />
-                        {version.scheme.name}
+                        <Users className="w-3 h-3" />
+                        {version.createdBy}
                       </span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => handleLoadVersion(viewingProject.id, version.id)}
-                      className="p-2 text-white/40 hover:text-gold hover:bg-gold/10 rounded transition-colors"
-                      title="恢复此版本"
-                    >
-                      <Archive className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteVersion(viewingProject.id, version.id)}
-                      className="p-2 text-white/40 hover:text-red-400 hover:bg-red-500/20 rounded transition-colors"
-                      title="删除版本"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                ))}
+              </div>
+            )}
+            <button
+              onClick={() => setCuratorHubTab('versions')}
+              className="w-full mt-4 py-2 text-sm text-gold hover:text-gold/80 transition-colors flex items-center justify-center gap-1"
+            >
+              查看所有版本 <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="card p-4">
+          <div className="flex items-center justify-between mb-4">
+            <h4 className="text-sm font-medium text-white flex items-center gap-2">
+              <FileText className="w-4 h-4 text-gold" />
+              项目方案
+            </h4>
+            <div className="flex items-center gap-2">
+              <label className="px-3 py-1.5 rounded-lg border border-gallery-border text-white/70 hover:text-white hover:border-gold/50 transition-colors text-xs flex items-center gap-1.5 cursor-pointer">
+                <Upload className="w-3.5 h-3.5" />
+                导入方案
+                <input
+                  ref={schemeFileInputRef}
+                  type="file"
+                  accept=".json"
+                  className="hidden"
+                  onChange={handleImportScheme}
+                />
+              </label>
+              <button
+                onClick={() => setShowCreateSchemeDialog(true)}
+                className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                新建方案
+              </button>
+            </div>
+          </div>
+          {projectSchemes.length > 0 ? (
+            <div className="grid grid-cols-4 gap-4">
+              <AnimatePresence mode="popLayout">
+                {projectSchemes
+                  .sort((a, b) => b.updatedAt - a.updatedAt)
+                  .map((scheme) => renderSchemeCard(scheme))}
+              </AnimatePresence>
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <FileText className="w-12 h-12 mx-auto mb-4 text-white/20" />
+              <p className="text-white/50 text-sm mb-2">暂无方案</p>
+              <p className="text-white/30 text-xs mb-4">创建第一个方案开始编排</p>
+              <button
+                onClick={() => setShowCreateSchemeDialog(true)}
+                className="btn-primary text-xs py-2 px-4 flex items-center gap-1.5 mx-auto"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                新建方案
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="card p-4">
+            <h4 className="text-sm font-medium text-white mb-3 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-gold" />
+              快速操作
+            </h4>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setCuratorHubTab('groups')}
+                className="p-4 bg-gallery-bg rounded-lg hover:bg-gallery-hover transition-colors text-left"
+              >
+                <Users className="w-6 h-6 text-blue-400 mb-2" />
+                <p className="text-sm font-medium text-white">作品分组</p>
+                <p className="text-xs text-white/40">管理作品主题分组</p>
+              </button>
+              <button
+                onClick={() => setCuratorHubTab('progress')}
+                className="p-4 bg-gallery-bg rounded-lg hover:bg-gallery-hover transition-colors text-left"
+              >
+                <TrendingUp className="w-6 h-6 text-green-400 mb-2" />
+                <p className="text-sm font-medium text-white">进度追踪</p>
+                <p className="text-xs text-white/40">追踪布展全流程</p>
+              </button>
+              <button
+                onClick={() => setCuratorHubTab('versions')}
+                className="p-4 bg-gallery-bg rounded-lg hover:bg-gallery-hover transition-colors text-left"
+              >
+                <GitCompare className="w-6 h-6 text-purple-400 mb-2" />
+                <p className="text-sm font-medium text-white">版本对比</p>
+                <p className="text-xs text-white/40">对比方案历史版本</p>
+              </button>
+              <button
+                onClick={() => setCuratorHubTab('export')}
+                className="p-4 bg-gallery-bg rounded-lg hover:bg-gallery-hover transition-colors text-left"
+              >
+                <Eye className="w-6 h-6 text-gold mb-2" />
+                <p className="text-sm font-medium text-white">预览导出</p>
+                <p className="text-xs text-white/40">多格式导出方案</p>
+              </button>
+            </div>
+          </div>
+
+          <div className="card p-4">
+            <h4 className="text-sm font-medium text-white mb-3 flex items-center gap-2">
+              <Settings className="w-4 h-4 text-gold" />
+              项目信息
+            </h4>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between py-2 border-b border-gallery-border/50">
+                <span className="text-sm text-white/60">项目状态</span>
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${getStatusDotColor(currentProject.status)}`} />
+                  <span className="text-sm text-white">{PROJECT_STATUS_LABELS[currentProject.status]}</span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between py-2 border-b border-gallery-border/50">
+                <span className="text-sm text-white/60">创建时间</span>
+                <span className="text-sm text-white">{formatDate(currentProject.createdAt)}</span>
+              </div>
+              <div className="flex items-center justify-between py-2 border-b border-gallery-border/50">
+                <span className="text-sm text-white/60">最后更新</span>
+                <span className="text-sm text-white">{formatDate(currentProject.updatedAt)}</span>
+              </div>
+              {currentProject.description && (
+                <div className="py-2">
+                  <span className="text-sm text-white/60 block mb-1">项目描述</span>
+                  <p className="text-sm text-white/70">{currentProject.description}</p>
+                </div>
+              )}
+              {currentProject.tags.length > 0 && (
+                <div className="py-2">
+                  <span className="text-sm text-white/60 block mb-2">标签</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {currentProject.tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="px-2 py-0.5 bg-gold/10 text-gold/70 text-xs rounded"
+                      >
+                        {tag}
+                      </span>
+                    ))}
                   </div>
                 </div>
-              </motion.div>
-            ))
-        )}
-      </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </motion.div>
     );
+  };
+
+  const renderTabContent = () => {
+    if (!currentProjectId) return null;
+
+    switch (curatorHubTab) {
+      case 'overview':
+        return renderOverview();
+      case 'groups':
+        return currentSchemeId ? (
+          <ArtworkGroupManager schemeId={currentSchemeId} />
+        ) : (
+          <div className="flex items-center justify-center h-full text-white/40">
+            <div className="text-center">
+              <AlertCircle className="w-12 h-12 mx-auto mb-4 text-white/20" />
+              <p className="text-white/50 mb-2">请先选择一个方案</p>
+              <p className="text-white/30 text-xs">在概览页面选择或创建方案</p>
+            </div>
+          </div>
+        );
+      case 'progress':
+        return <ProgressTracker projectId={currentProjectId} />;
+      case 'versions':
+        return <VersionManager projectId={currentProjectId} />;
+      case 'export':
+        return <ExportPreview projectId={currentProjectId} />;
+      default:
+        return null;
+    }
   };
 
   return (
@@ -703,27 +1052,16 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
     >
       <header className="h-16 border-b border-gallery-border bg-gallery-surface/50 flex items-center justify-between px-6">
         <div className="flex items-center gap-4">
-          {viewingProjectId ? (
-            <button
-              onClick={() => {
-                setViewingProjectId(null);
-                setShowVersionHistory(false);
-              }}
-              className="p-2 rounded-lg text-white/60 hover:text-white hover:bg-gallery-hover transition-colors -ml-2"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-          ) : null}
           <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-gold to-gold-dark flex items-center justify-center">
             <LayoutGrid className="w-5 h-5 text-gallery-bg" />
           </div>
           <div>
             <h1 className="text-xl font-display font-semibold text-white">
-              {viewingProject ? viewingProject.name : '策展项目中心'}
+              {currentProject ? currentProject.name : '策展项目中心'}
             </h1>
             <p className="text-xs text-white/50">
-              {viewingProject
-                ? `管理项目方案和版本 · ${viewingProject.schemeIds.length} 个方案 · ${viewingProject.versions.length} 个版本`
+              {currentProject
+                ? `${currentProject.schemeIds.length} 个方案 · ${currentProject.versions.length} 个版本 · ${currentProject.progress.overallProgress}% 进度`
                 : '管理您的策展项目、方案和编排'}
             </p>
           </div>
@@ -738,7 +1076,7 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
             单作品预览
           </button>
 
-          {!viewingProjectId && (
+          {!currentProjectId && (
             <>
               <label className="px-4 py-2 rounded-lg border border-gallery-border text-white/70 hover:text-white hover:border-gold/50 transition-colors text-sm flex items-center gap-2 cursor-pointer">
                 <Upload className="w-4 h-4" />
@@ -761,34 +1099,17 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
             </>
           )}
 
-          {viewingProjectId && (
-            <>
-              <label className="px-4 py-2 rounded-lg border border-gallery-border text-white/70 hover:text-white hover:border-gold/50 transition-colors text-sm flex items-center gap-2 cursor-pointer">
-                <Upload className="w-4 h-4" />
-                导入方案
-                <input
-                  ref={schemeFileInputRef}
-                  type="file"
-                  accept=".json"
-                  className="hidden"
-                  onChange={handleImportScheme}
-                />
-              </label>
-              <button
-                onClick={() => handleOpenVersionDialog(viewingProjectId!)}
-                className="px-4 py-2 rounded-lg border border-gallery-border text-white/70 hover:text-white hover:border-gold/50 transition-colors text-sm flex items-center gap-2"
-              >
-                <Save className="w-4 h-4" />
-                保存版本
-              </button>
-              <button
-                onClick={() => setShowCreateSchemeDialog(true)}
-                className="btn-primary text-sm px-4 py-2 flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                新建方案
-              </button>
-            </>
+          {currentProjectId && (
+            <button
+              onClick={() => {
+                setCurrentProject(null);
+                setCuratorHubTab('overview');
+              }}
+              className="px-4 py-2 rounded-lg border border-gallery-border text-white/70 hover:text-white hover:border-gold/50 transition-colors text-sm flex items-center gap-2"
+            >
+              <FolderOpen className="w-4 h-4" />
+              所有项目
+            </button>
           )}
 
           <button
@@ -800,51 +1121,41 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
         </div>
       </header>
 
-      {viewingProjectId && (
+      {currentProjectId && (
         <div className="h-12 border-b border-gallery-border bg-gallery-surface/30 flex items-center gap-1 px-6">
-          <button
-            onClick={() => setShowVersionHistory(false)}
-            className={`px-4 py-1.5 rounded-lg text-sm transition-colors flex items-center gap-2 ${
-              !showVersionHistory
-                ? 'bg-gold/20 text-gold'
-                : 'text-white/60 hover:text-white hover:bg-gallery-hover'
-            }`}
-          >
-            <FolderOpen className="w-4 h-4" />
-            方案列表
-          </button>
-          <button
-            onClick={() => setShowVersionHistory(true)}
-            className={`px-4 py-1.5 rounded-lg text-sm transition-colors flex items-center gap-2 ${
-              showVersionHistory
-                ? 'bg-gold/20 text-gold'
-                : 'text-white/60 hover:text-white hover:bg-gallery-hover'
-            }`}
-          >
-            <History className="w-4 h-4" />
-            版本历史
-            {viewingProject?.versions.length ? (
-              <span className="px-1.5 py-0.5 bg-gold/30 text-gallery-bg text-xs rounded-full">
-                {viewingProject.versions.length}
-              </span>
-            ) : null}
-          </button>
+          {CURATOR_HUB_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setCuratorHubTab(tab.id)}
+              className={`px-4 py-1.5 rounded-lg text-sm transition-colors flex items-center gap-2 ${
+                curatorHubTab === tab.id
+                  ? 'bg-gold/20 text-gold'
+                  : 'text-white/60 hover:text-white hover:bg-gallery-hover'
+              }`}
+            >
+              {tab.id === 'overview' && <Home className="w-4 h-4" />}
+              {tab.id === 'groups' && <Users className="w-4 h-4" />}
+              {tab.id === 'progress' && <TrendingUp className="w-4 h-4" />}
+              {tab.id === 'versions' && <GitCompare className="w-4 h-4" />}
+              {tab.id === 'export' && <Eye className="w-4 h-4" />}
+              {tab.label}
+            </button>
+          ))}
           <div className="flex-1" />
-          <div className="flex items-center gap-4 text-xs text-white/40">
-            <div className="flex items-center gap-1.5">
-              <span className={`w-2 h-2 rounded-full ${getCurrentProjectStatusColor(viewingProject)}`} />
-              {viewingProject ? PROJECT_STATUS_LABELS[viewingProject.status] : ''}
+          {currentProject && (
+            <div className="flex items-center gap-4 text-xs text-white/40">
+              <div className="flex items-center gap-1.5">
+                <div className={`w-2 h-2 rounded-full ${getStatusDotColor(currentProject.status)}`} />
+                {PROJECT_STATUS_LABELS[currentProject.status]}
+              </div>
             </div>
-            {viewingProject?.description && (
-              <div className="max-w-xs truncate">{viewingProject.description}</div>
-            )}
-          </div>
+          )}
         </div>
       )}
 
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-7xl mx-auto">
-          {!viewingProjectId && curatorProjects.length > 0 && (
+          {!currentProjectId && curatorProjects.length > 0 && (
             <section>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-display font-semibold text-white flex items-center gap-2">
@@ -865,62 +1176,9 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
             </section>
           )}
 
-          {viewingProjectId && !showVersionHistory && (
-            <section>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-display font-semibold text-white flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-gold" />
-                  项目方案
-                </h2>
-                <span className="text-sm text-white/50">
-                  共 {viewingProjectSchemes.length} 个方案
-                </span>
-              </div>
-              {viewingProjectSchemes.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  <AnimatePresence mode="popLayout">
-                    {viewingProjectSchemes
-                      .sort((a, b) => b.updatedAt - a.updatedAt)
-                      .map((scheme) => renderSchemeCard(scheme))}
-                  </AnimatePresence>
-                </div>
-              ) : (
-                <div className="text-center py-16">
-                  <FileText className="w-16 h-16 mx-auto mb-4 text-white/10" />
-                  <h3 className="text-lg font-medium text-white mb-2">暂无方案</h3>
-                  <p className="text-white/50 text-sm mb-6">创建第一个方案开始编排</p>
-                  <button
-                    onClick={() => setShowCreateSchemeDialog(true)}
-                    className="btn-primary px-5 py-2.5 flex items-center gap-2 mx-auto"
-                  >
-                    <Plus className="w-4 h-4" />
-                    新建方案
-                  </button>
-                </div>
-              )}
-            </section>
-          )}
+          {currentProjectId && renderTabContent()}
 
-          {viewingProjectId && showVersionHistory && (
-            <section>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-display font-semibold text-white flex items-center gap-2">
-                  <History className="w-5 h-5 text-gold" />
-                  版本历史
-                </h2>
-                <button
-                  onClick={() => handleOpenVersionDialog(viewingProjectId!)}
-                  className="px-4 py-2 rounded-lg border border-gallery-border text-white/70 hover:text-white hover:border-gold/50 transition-colors text-sm flex items-center gap-2"
-                >
-                  <Save className="w-4 h-4" />
-                  保存新版本
-                </button>
-              </div>
-              {renderVersionHistory()}
-            </section>
-          )}
-
-          {!viewingProjectId && curatorProjects.length === 0 && (
+          {!currentProjectId && curatorProjects.length === 0 && (
             <div className="h-full flex items-center justify-center">
               <div className="text-center">
                 <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-gold/10 flex items-center justify-center">
@@ -966,7 +1224,7 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
           </div>
           {currentProject && (
             <div className="flex items-center gap-1.5">
-              <div className={`w-2 h-2 rounded-full ${getCurrentProjectStatusColor(currentProject)}`} />
+              <div className={`w-2 h-2 rounded-full ${getStatusDotColor(currentProject.status)}`} />
               <span>当前项目: {currentProject.name}</span>
             </div>
           )}
@@ -998,7 +1256,7 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm text-white/70 mb-2">
-                    项目名称
+                    项目名称 <span className="text-red-400">*</span>
                   </label>
                   <input
                     type="text"
@@ -1077,7 +1335,7 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm text-white/70 mb-2">
-                    方案名称
+                    方案名称 <span className="text-red-400">*</span>
                   </label>
                   <input
                     type="text"
@@ -1122,95 +1380,7 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
             </motion.div>
           </motion.div>
         )}
-
-        {showVersionDialog && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-            onClick={() => {
-              setShowVersionDialog(false);
-              setSelectedProjectForVersion(null);
-            }}
-          >
-            <motion.div
-              initial={{ scale: 0.95, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 20 }}
-              className="card p-6 max-w-md w-full"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h3 className="text-xl font-display font-semibold text-white mb-4">
-                保存项目版本
-              </h3>
-              <p className="text-sm text-white/50 mb-4">
-                保存当前方案的完整状态，便于后续恢复和对比
-              </p>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm text-white/70 mb-2">
-                    版本名称
-                  </label>
-                  <input
-                    type="text"
-                    value={newVersionName}
-                    onChange={(e) => setNewVersionName(e.target.value)}
-                    className="input-field"
-                    placeholder="例如: 初版方案、评审版、最终版..."
-                    autoFocus
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleSaveVersion();
-                    }}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm text-white/70 mb-2">
-                    版本说明（可选）
-                  </label>
-                  <textarea
-                    value={newVersionDescription}
-                    onChange={(e) => setNewVersionDescription(e.target.value)}
-                    className="input-field resize-none"
-                    rows={3}
-                    placeholder="描述此版本的变更内容..."
-                  />
-                </div>
-              </div>
-              <div className="flex gap-3 mt-6">
-                <button
-                  onClick={() => {
-                    setShowVersionDialog(false);
-                    setSelectedProjectForVersion(null);
-                  }}
-                  className="flex-1 btn-secondary"
-                >
-                  取消
-                </button>
-                <button
-                  onClick={handleSaveVersion}
-                  disabled={!newVersionName.trim()}
-                  className="flex-1 btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  <Save className="w-4 h-4" />
-                  保存版本
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
       </AnimatePresence>
     </motion.div>
   );
 };
-
-function getCurrentProjectStatusColor(project: CuratorProject | null): string {
-  if (!project) return 'bg-gray-500';
-  switch (project.status) {
-    case 'draft': return 'bg-gray-500';
-    case 'in_progress': return 'bg-blue-500';
-    case 'completed': return 'bg-green-500';
-    case 'archived': return 'bg-purple-500';
-    default: return 'bg-gray-500';
-  }
-}

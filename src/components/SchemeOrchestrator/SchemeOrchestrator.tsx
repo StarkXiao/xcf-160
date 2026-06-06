@@ -14,6 +14,8 @@ import {
   X,
   ChevronDown,
   FolderOpen,
+  Layers,
+  TrendingUp,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { SCHEME_PANEL_TABS } from '../../types';
@@ -105,7 +107,9 @@ export const SchemeOrchestrator: React.FC = () => {
   const tabIcons: Record<SchemePanelTab, React.ReactNode> = {
     layout: <LayoutGrid className="w-4 h-4" />,
     lighting: <Lightbulb className="w-4 h-4" />,
+    groups: <Layers className="w-4 h-4" />,
     snapshots: <Camera className="w-4 h-4" />,
+    progress: <TrendingUp className="w-4 h-4" />,
   };
 
   const renderTabContent = () => {

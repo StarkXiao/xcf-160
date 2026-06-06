@@ -71,6 +71,54 @@ export interface LightingStrategy {
   }[];
 }
 
+export interface ArtworkGroup {
+  id: string;
+  name: string;
+  description?: string;
+  color: string;
+  artworkIds: string[];
+  order: number;
+}
+
+export type ProgressStatus = 'not_started' | 'in_progress' | 'completed' | 'blocked';
+
+export interface ProgressStep {
+  id: string;
+  name: string;
+  description?: string;
+  status: ProgressStatus;
+  order: number;
+  assignee?: string;
+  dueDate?: number;
+  completedAt?: number;
+  notes?: string;
+}
+
+export interface ProjectProgress {
+  steps: ProgressStep[];
+  overallProgress: number;
+}
+
+export interface VersionComment {
+  id: string;
+  versionId: string;
+  author: string;
+  content: string;
+  createdAt: number;
+}
+
+export type ExportFormat = 'json' | 'pdf' | 'image' | 'print';
+export type ExportResolution = 'low' | 'medium' | 'high' | 'print';
+
+export interface ExportConfig {
+  format: ExportFormat;
+  resolution: ExportResolution;
+  includeMetadata: boolean;
+  includeArtworkInfo: boolean;
+  includeLightingSpec: boolean;
+  watermark?: string;
+}
+
 export interface GalleryScheme {
   id: string;
   name: string;
@@ -79,6 +127,7 @@ export interface GalleryScheme {
   wallArtworks: WallArtwork[];
   lightingStrategy: LightingStrategy;
   wallMaterial: WallMaterial;
+  groups: ArtworkGroup[];
   createdAt: number;
   updatedAt: number;
 }
@@ -100,15 +149,18 @@ export interface CuratorProject {
   schemeIds: string[];
   currentSchemeId: string | null;
   versions: ProjectVersion[];
+  versionComments: VersionComment[];
+  progress: ProjectProgress;
   status: 'draft' | 'in_progress' | 'completed' | 'archived';
   tags: string[];
   createdAt: number;
   updatedAt: number;
 }
 
-export type SchemePanelTab = 'layout' | 'lighting' | 'snapshots';
+export type SchemePanelTab = 'layout' | 'lighting' | 'snapshots' | 'groups' | 'progress';
 export type AppMode = 'artwork' | 'curator';
-export type ProjectViewTab = 'projects' | 'schemes' | 'versions';
+export type ProjectViewTab = 'projects' | 'schemes' | 'versions' | 'progress' | 'export';
+export type CuratorHubTab = 'overview' | 'groups' | 'progress' | 'versions' | 'export';
 
 export interface AppState {
   artworks: Artwork[];
@@ -127,6 +179,9 @@ export interface AppState {
   currentProjectId: string | null;
   projectViewTab: ProjectViewTab;
   showCuratorHub: boolean;
+  curatorHubTab: CuratorHubTab;
+  selectedGroupId: string | null;
+  selectedVersionId: string | null;
 }
 
 export const LIGHT_TYPE_LABELS: Record<LightType, string> = {
@@ -191,8 +246,69 @@ export const LIGHTING_STRATEGY_MODE_LABELS: Record<LightingStrategyMode, string>
 export const SCHEME_PANEL_TABS: { id: SchemePanelTab; label: string }[] = [
   { id: 'layout', label: '挂墙布局' },
   { id: 'lighting', label: '灯光策略' },
+  { id: 'groups', label: '作品分组' },
   { id: 'snapshots', label: '方案快照' },
 ];
+
+export const PROGRESS_STATUS_LABELS: Record<ProgressStatus, string> = {
+  not_started: '未开始',
+  in_progress: '进行中',
+  completed: '已完成',
+  blocked: '已阻塞',
+};
+
+export const PROGRESS_STATUS_COLORS: Record<ProgressStatus, string> = {
+  not_started: 'bg-gray-500',
+  in_progress: 'bg-blue-500',
+  completed: 'bg-green-500',
+  blocked: 'bg-red-500',
+};
+
+export const EXPORT_FORMAT_LABELS: Record<ExportFormat, string> = {
+  json: 'JSON 数据',
+  pdf: 'PDF 文档',
+  image: '图片导出',
+  print: '打印规格',
+};
+
+export const EXPORT_RESOLUTION_LABELS: Record<ExportResolution, string> = {
+  low: '低清 (72dpi)',
+  medium: '标清 (150dpi)',
+  high: '高清 (300dpi)',
+  print: '印刷级 (600dpi)',
+};
+
+export const CURATOR_HUB_TABS: { id: CuratorHubTab; label: string }[] = [
+  { id: 'overview', label: '项目概览' },
+  { id: 'groups', label: '作品分组' },
+  { id: 'progress', label: '布展进度' },
+  { id: 'versions', label: '版本历史' },
+  { id: 'export', label: '预览输出' },
+];
+
+export const DEFAULT_PROGRESS_STEPS: Omit<ProgressStep, 'id'>[] = [
+  { name: '确定展览主题', description: '明确展览的主题、目标和受众', status: 'not_started', order: 0 },
+  { name: '作品筛选与分组', description: '选择参展作品并进行主题分组', status: 'not_started', order: 1 },
+  { name: '空间规划设计', description: '设计展厅布局和作品陈列方案', status: 'not_started', order: 2 },
+  { name: '灯光方案设计', description: '为每件作品设计专属灯光方案', status: 'not_started', order: 3 },
+  { name: '材质与装裱', description: '确定画框材质和墙面处理', status: 'not_started', order: 4 },
+  { name: '方案评审', description: '内部评审并收集反馈意见', status: 'not_started', order: 5 },
+  { name: '方案调整', description: '根据评审意见调整方案', status: 'not_started', order: 6 },
+  { name: '最终确认', description: '最终方案确认并准备实施', status: 'not_started', order: 7 },
+];
+
+export const DEFAULT_PROGRESS: ProjectProgress = {
+  steps: [],
+  overallProgress: 0,
+};
+
+export const DEFAULT_EXPORT_CONFIG: ExportConfig = {
+  format: 'json',
+  resolution: 'high',
+  includeMetadata: true,
+  includeArtworkInfo: true,
+  includeLightingSpec: true,
+};
 
 export const APP_MODE_LABELS: Record<AppMode, string> = {
   artwork: '单作品预览',
@@ -218,6 +334,14 @@ export const DEFAULT_PROJECT: Omit<CuratorProject, 'id' | 'createdAt' | 'updated
   schemeIds: [],
   currentSchemeId: null,
   versions: [],
+  versionComments: [],
+  progress: {
+    steps: DEFAULT_PROGRESS_STEPS.map((step, index) => ({
+      ...step,
+      id: `step-${index}`,
+    })),
+    overallProgress: 0,
+  },
   status: 'draft',
   tags: [],
 };
