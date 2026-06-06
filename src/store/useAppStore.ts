@@ -58,6 +58,11 @@ import type {
   MountingAdjustment,
   LightingAdjustment,
   CompatibilityHint,
+  CompareParameterKey,
+  ParameterDifference,
+  BatchOperationConfig,
+  BatchOperationType,
+  CompareViewState,
 } from '../types';
 import {
   DEFAULT_LIGHTING,
@@ -89,6 +94,8 @@ import {
   MOCK_VENUE_CONDITIONS,
   DEFAULT_PRESET_GROUPS,
   LOCAL_PRESET_SORT_TYPES,
+  DEFAULT_COMPARE_VIEW_STATE,
+  COMPARE_PARAMETER_LABELS,
 } from '../types';
 import type { LocalPresetSortType } from '../types';
 import type {
@@ -367,6 +374,23 @@ interface AppStore extends AppState {
 
   setTourAdaptationPanelTab: (tab: TourAdaptationPanelTab) => void;
   setTourAdaptationConfig: (config: Partial<TourAdaptationConfig>) => void;
+
+  setLockedPreset: (presetId: string | null) => void;
+  toggleParameterLink: (paramKey: CompareParameterKey) => void;
+  clearLinkedParameters: () => void;
+  togglePresetForBatch: (presetId: string) => void;
+  selectAllForBatch: () => void;
+  clearBatchSelection: () => void;
+  setShowBatchPanel: (show: boolean) => void;
+  setShowOnlyDifferences: (show: boolean) => void;
+  getParameterDifferences: (presetIds: string[]) => ParameterDifference[];
+  getParameterValue: (preset: Preset, key: CompareParameterKey) => unknown;
+  setParameterValue: (presetId: string, key: CompareParameterKey, value: unknown) => void;
+  batchCopyFrom: (sourcePresetId: string, targetPresetIds: string[], parameterKeys?: CompareParameterKey[]) => void;
+  batchSetValue: (targetPresetIds: string[], key: CompareParameterKey, value: unknown) => void;
+  batchResetToDefault: (targetPresetIds: string[], parameterKeys?: CompareParameterKey[]) => void;
+  executeBatchOperation: (config: BatchOperationConfig) => void;
+  resetCompareView: () => void;
 }
 
 const getInitialState = (): AppState => {
@@ -478,6 +502,7 @@ const getInitialState = (): AppState => {
     tourAdaptationConfig: { ...DEFAULT_TOUR_ADAPTATION_CONFIG },
     tourAdaptationPanelTab: 'venue',
     isPerformingAdaptation: false,
+    compareView: { ...DEFAULT_COMPARE_VIEW_STATE },
   };
 };
 
@@ -3905,5 +3930,334 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set((state) => ({
       tourAdaptationConfig: { ...state.tourAdaptationConfig, ...config },
     }));
+  },
+
+  setLockedPreset: (presetId) => {
+    set((state) => ({
+      compareView: { ...state.compareView, lockedPresetId: presetId },
+    }));
+  },
+
+  toggleParameterLink: (paramKey) => {
+    set((state) => {
+      const newLinked = new Set(state.compareView.linkedParameters);
+      if (newLinked.has(paramKey)) {
+        newLinked.delete(paramKey);
+      } else {
+        newLinked.add(paramKey);
+      }
+      return {
+        compareView: { ...state.compareView, linkedParameters: newLinked },
+      };
+    });
+  },
+
+  clearLinkedParameters: () => {
+    set((state) => ({
+      compareView: { ...state.compareView, linkedParameters: new Set() },
+    }));
+  },
+
+  togglePresetForBatch: (presetId) => {
+    set((state) => {
+      const newSelected = new Set(state.compareView.selectedForBatch);
+      if (newSelected.has(presetId)) {
+        newSelected.delete(presetId);
+      } else {
+        newSelected.add(presetId);
+      }
+      return {
+        compareView: { ...state.compareView, selectedForBatch: newSelected },
+      };
+    });
+  },
+
+  selectAllForBatch: () => {
+    const { compareList } = get();
+    set((state) => ({
+      compareView: { ...state.compareView, selectedForBatch: new Set(compareList) },
+    }));
+  },
+
+  clearBatchSelection: () => {
+    set((state) => ({
+      compareView: { ...state.compareView, selectedForBatch: new Set() },
+    }));
+  },
+
+  setShowBatchPanel: (show) => {
+    set((state) => ({
+      compareView: { ...state.compareView, showBatchPanel: show },
+    }));
+  },
+
+  setShowOnlyDifferences: (show) => {
+    set((state) => ({
+      compareView: { ...state.compareView, showOnlyDifferences: show },
+    }));
+  },
+
+  getParameterValue: (preset, key) => {
+    const parts = key.split('.');
+    if (parts.length === 2) {
+      const [category, field] = parts;
+      if (category === 'lighting') {
+        return preset.lighting[field as keyof LightingConfig];
+      } else if (category === 'material') {
+        return preset.material[field as keyof MaterialConfig];
+      }
+    }
+    return undefined;
+  },
+
+  getParameterDifferences: (presetIds) => {
+    const { presets, getParameterValue } = get();
+    const comparePresets = presets.filter((p) => presetIds.includes(p.id));
+    if (comparePresets.length < 2) return [];
+
+    const paramKeys: CompareParameterKey[] = [
+      'lighting.type',
+      'lighting.colorTemperature',
+      'lighting.intensity',
+      'lighting.angle',
+      'lighting.positionX',
+      'lighting.positionY',
+      'lighting.positionZ',
+      'material.frameMaterial',
+      'material.wallMaterial',
+      'material.reflectivity',
+      'material.roughness',
+    ];
+
+    return paramKeys.map((key) => {
+      const values: Record<string, unknown> = {};
+      comparePresets.forEach((preset) => {
+        values[preset.id] = getParameterValue(preset, key);
+      });
+
+      const valueArray = Object.values(values);
+      const isDifferent = !valueArray.every((v) => JSON.stringify(v) === JSON.stringify(valueArray[0]));
+
+      return {
+        key,
+        values,
+        isDifferent,
+      };
+    });
+  },
+
+  setParameterValue: (presetId, key, value) => {
+    const { presets, compareView, compareList } = get();
+    const parts = key.split('.');
+    if (parts.length !== 2) return;
+
+    const [category, field] = parts;
+    const newPresets = presets.map((p) => {
+      if (p.id !== presetId) return p;
+
+      if (category === 'lighting') {
+        return {
+          ...p,
+          lighting: { ...p.lighting, [field]: value },
+          updatedAt: Date.now(),
+        };
+      } else if (category === 'material') {
+        return {
+          ...p,
+          material: { ...p.material, [field]: value },
+          updatedAt: Date.now(),
+        };
+      }
+      return p;
+    });
+
+    const linkedUpdates: Record<string, Partial<LightingConfig> | Partial<MaterialConfig>> = {};
+    if (compareView.linkedParameters.has(key)) {
+      const linkedPresets = presets.filter(
+        (p) => compareList.includes(p.id) && p.id !== presetId
+      );
+      linkedPresets.forEach((lp) => {
+        if (category === 'lighting') {
+          linkedUpdates[lp.id] = { [field]: value } as Partial<LightingConfig>;
+        } else if (category === 'material') {
+          linkedUpdates[lp.id] = { [field]: value } as Partial<MaterialConfig>;
+        }
+      });
+
+      Object.entries(linkedUpdates).forEach(([id, updates]) => {
+        const idx = newPresets.findIndex((p) => p.id === id);
+        if (idx !== -1) {
+          if (category === 'lighting') {
+            newPresets[idx] = {
+              ...newPresets[idx],
+              lighting: { ...newPresets[idx].lighting, ...updates },
+              updatedAt: Date.now(),
+            };
+          } else if (category === 'material') {
+            newPresets[idx] = {
+              ...newPresets[idx],
+              material: { ...newPresets[idx].material, ...updates },
+              updatedAt: Date.now(),
+            };
+          }
+        }
+      });
+    }
+
+    set({ presets: newPresets });
+    savePresets(newPresets);
+  },
+
+  batchCopyFrom: (sourcePresetId, targetPresetIds, parameterKeys) => {
+    const { presets, getParameterValue } = get();
+    const sourcePreset = presets.find((p) => p.id === sourcePresetId);
+    if (!sourcePreset) return;
+
+    const keys: CompareParameterKey[] = parameterKeys || [
+      'lighting.type',
+      'lighting.colorTemperature',
+      'lighting.intensity',
+      'lighting.angle',
+      'lighting.positionX',
+      'lighting.positionY',
+      'lighting.positionZ',
+      'material.frameMaterial',
+      'material.wallMaterial',
+      'material.reflectivity',
+      'material.roughness',
+    ];
+
+    const newPresets = presets.map((p) => {
+      if (!targetPresetIds.includes(p.id)) return p;
+
+      let newLighting = { ...p.lighting };
+      let newMaterial = { ...p.material };
+
+      keys.forEach((key) => {
+        const value = getParameterValue(sourcePreset, key);
+        const parts = key.split('.');
+        if (parts.length === 2) {
+          const [category, field] = parts;
+          if (category === 'lighting') {
+            newLighting = { ...newLighting, [field]: value };
+          } else if (category === 'material') {
+            newMaterial = { ...newMaterial, [field]: value };
+          }
+        }
+      });
+
+      return {
+        ...p,
+        lighting: newLighting,
+        material: newMaterial,
+        updatedAt: Date.now(),
+      };
+    });
+
+    set({ presets: newPresets });
+    savePresets(newPresets);
+  },
+
+  batchSetValue: (targetPresetIds, key, value) => {
+    const { presets } = get();
+    const parts = key.split('.');
+    if (parts.length !== 2) return;
+
+    const [category, field] = parts;
+    const newPresets = presets.map((p) => {
+      if (!targetPresetIds.includes(p.id)) return p;
+
+      if (category === 'lighting') {
+        return {
+          ...p,
+          lighting: { ...p.lighting, [field]: value },
+          updatedAt: Date.now(),
+        };
+      } else if (category === 'material') {
+        return {
+          ...p,
+          material: { ...p.material, [field]: value },
+          updatedAt: Date.now(),
+        };
+      }
+      return p;
+    });
+
+    set({ presets: newPresets });
+    savePresets(newPresets);
+  },
+
+  batchResetToDefault: (targetPresetIds, parameterKeys) => {
+    const { presets } = get();
+    const keys: CompareParameterKey[] = parameterKeys || [
+      'lighting.type',
+      'lighting.colorTemperature',
+      'lighting.intensity',
+      'lighting.angle',
+      'lighting.positionX',
+      'lighting.positionY',
+      'lighting.positionZ',
+      'material.frameMaterial',
+      'material.wallMaterial',
+      'material.reflectivity',
+      'material.roughness',
+    ];
+
+    const newPresets = presets.map((p) => {
+      if (!targetPresetIds.includes(p.id)) return p;
+
+      let newLighting = { ...p.lighting };
+      let newMaterial = { ...p.material };
+
+      keys.forEach((key) => {
+        const parts = key.split('.');
+        if (parts.length === 2) {
+          const [category, field] = parts;
+          if (category === 'lighting') {
+            newLighting = { ...newLighting, [field]: DEFAULT_LIGHTING[field as keyof LightingConfig] };
+          } else if (category === 'material') {
+            newMaterial = { ...newMaterial, [field]: DEFAULT_MATERIAL[field as keyof MaterialConfig] };
+          }
+        }
+      });
+
+      return {
+        ...p,
+        lighting: newLighting,
+        material: newMaterial,
+        updatedAt: Date.now(),
+      };
+    });
+
+    set({ presets: newPresets });
+    savePresets(newPresets);
+  },
+
+  executeBatchOperation: (config) => {
+    const { batchCopyFrom, batchSetValue, batchResetToDefault } = get();
+
+    switch (config.type) {
+      case 'copyFrom':
+        if (config.sourcePresetId) {
+          batchCopyFrom(config.sourcePresetId, config.targetPresetIds, config.parameterKey ? [config.parameterKey] : undefined);
+        }
+        break;
+      case 'setValue':
+        if (config.parameterKey && config.value !== undefined) {
+          batchSetValue(config.targetPresetIds, config.parameterKey, config.value);
+        }
+        break;
+      case 'resetToDefault':
+        batchResetToDefault(config.targetPresetIds, config.parameterKey ? [config.parameterKey] : undefined);
+        break;
+      case 'syncLinked':
+        break;
+    }
+  },
+
+  resetCompareView: () => {
+    set({
+      compareView: { ...DEFAULT_COMPARE_VIEW_STATE },
+    });
   },
 }));

@@ -819,6 +819,7 @@ export interface AppState {
   tourAdaptationConfig: TourAdaptationConfig;
   tourAdaptationPanelTab: TourAdaptationPanelTab;
   isPerformingAdaptation: boolean;
+  compareView: CompareViewState;
 }
 
 export const APPROVAL_STATUS_LABELS: Record<ApprovalStatus, string> = {
@@ -1921,3 +1922,62 @@ export const TOUR_ADAPTATION_PANEL_TABS: { id: TourAdaptationPanelTab; label: st
   { id: 'lighting', label: '灯光调整', icon: 'Lightbulb' },
   { id: 'compatibility', label: '兼容提示', icon: 'AlertTriangle' },
 ];
+
+export type CompareParameterKey =
+  | 'lighting.type'
+  | 'lighting.colorTemperature'
+  | 'lighting.intensity'
+  | 'lighting.angle'
+  | 'lighting.positionX'
+  | 'lighting.positionY'
+  | 'lighting.positionZ'
+  | 'material.frameMaterial'
+  | 'material.wallMaterial'
+  | 'material.reflectivity'
+  | 'material.roughness';
+
+export const COMPARE_PARAMETER_LABELS: Record<CompareParameterKey, string> = {
+  'lighting.type': '灯光类型',
+  'lighting.colorTemperature': '色温',
+  'lighting.intensity': '亮度',
+  'lighting.angle': '光束角',
+  'lighting.positionX': '水平位置',
+  'lighting.positionY': '垂直位置',
+  'lighting.positionZ': '距离',
+  'material.frameMaterial': '画框材质',
+  'material.wallMaterial': '墙面材质',
+  'material.reflectivity': '反射率',
+  'material.roughness': '粗糙度',
+};
+
+export interface ParameterDifference {
+  key: CompareParameterKey;
+  values: Record<string, unknown>;
+  isDifferent: boolean;
+}
+
+export type BatchOperationType = 'copyFrom' | 'setValue' | 'resetToDefault' | 'syncLinked';
+
+export interface BatchOperationConfig {
+  type: BatchOperationType;
+  sourcePresetId?: string;
+  parameterKey?: CompareParameterKey;
+  value?: unknown;
+  targetPresetIds: string[];
+}
+
+export interface CompareViewState {
+  lockedPresetId: string | null;
+  linkedParameters: Set<CompareParameterKey>;
+  selectedForBatch: Set<string>;
+  showBatchPanel: boolean;
+  showOnlyDifferences: boolean;
+}
+
+export const DEFAULT_COMPARE_VIEW_STATE: CompareViewState = {
+  lockedPresetId: null,
+  linkedParameters: new Set(),
+  selectedForBatch: new Set(),
+  showBatchPanel: false,
+  showOnlyDifferences: false,
+};
