@@ -763,6 +763,9 @@ export interface AppState {
   artworks: Artwork[];
   selectedArtworkId: string | null;
   selectedArtworkIds: Set<string>;
+  artworkSortType: ArtworkSortType;
+  artworkSortDirection: 'asc' | 'desc';
+  artworkFilterTagIds: string[];
   lighting: LightingConfig;
   material: MaterialConfig;
   presets: Preset[];
@@ -1981,3 +1984,49 @@ export const DEFAULT_COMPARE_VIEW_STATE: CompareViewState = {
   showBatchPanel: false,
   showOnlyDifferences: false,
 };
+
+export type ArtworkSortType = 'title' | 'artist' | 'year' | 'createdAt' | 'updatedAt' | 'width' | 'height';
+
+export const ARTWORK_SORT_TYPES: { id: ArtworkSortType; label: string }[] = [
+  { id: 'title', label: '标题排序' },
+  { id: 'artist', label: '艺术家' },
+  { id: 'year', label: '创作年份' },
+  { id: 'createdAt', label: '入库时间' },
+  { id: 'updatedAt', label: '最近更新' },
+  { id: 'width', label: '宽度' },
+  { id: 'height', label: '高度' },
+];
+
+export interface ArtworkUsageInfo {
+  type: 'scheme' | 'theme' | 'project';
+  id: string;
+  name: string;
+}
+
+export interface ArtworkDeletionValidation {
+  canDelete: boolean;
+  usageInfo: ArtworkUsageInfo[];
+}
+
+export interface BatchImportError {
+  index: number;
+  title?: string;
+  errors: string[];
+}
+
+export interface BatchImportResult {
+  successCount: number;
+  failCount: number;
+  totalCount: number;
+  errors: BatchImportError[];
+  importedArtworkIds: string[];
+}
+
+export type BatchDeleteMode = 'safe' | 'force';
+
+export interface BatchDeleteResult {
+  deletedCount: number;
+  skippedCount: number;
+  totalCount: number;
+  skippedArtworks: { id: string; title: string; reason: string }[];
+}

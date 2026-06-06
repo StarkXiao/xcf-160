@@ -20,6 +20,13 @@ import {
   Filter,
   ChevronDown,
   ChevronUp,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  CheckSquare,
+  Square,
+  AlertTriangle,
+  FileJson,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import type {
@@ -27,12 +34,16 @@ import type {
   IngestionValidationError,
   ArtworkTag,
   Artwork,
+  ArtworkSortType,
+  ArtworkDeletionValidation,
+  BatchImportResult,
 } from '../../types';
 import {
   DEFAULT_INGESTION_FORM,
   WORKSTATION_TABS,
   TAG_CATEGORIES,
   INGESTION_STATUS_LABELS,
+  ARTWORK_SORT_TYPES,
 } from '../../types';
 import Empty from '../Empty';
 
@@ -50,10 +61,21 @@ export const ArtworkIngestionWorkstation: React.FC = () => {
     removeArtworkTag,
     validateIngestionForm,
     submitIngestion,
-    getFilteredArtworks,
     getArtworksByTagId,
-    removeArtwork,
     updateArtworkWithTags,
+    filterAndSortArtworks,
+    artworkSortType,
+    artworkSortDirection,
+    setArtworkSortType,
+    setArtworkSortDirection,
+    selectedArtworkIds,
+    toggleArtworkSelection,
+    selectAllArtworks,
+    clearArtworkSelections,
+    validateArtworkDeletion,
+    removeArtworkWithValidation,
+    batchRemoveArtworks,
+    batchAddArtworksWithTags,
   } = useAppStore();
 
   const [formData, setFormData] = useState<IngestionFormData>({ ...DEFAULT_INGESTION_FORM });
@@ -63,22 +85,27 @@ export const ArtworkIngestionWorkstation: React.FC = () => {
   const [autoDetectedSize, setAutoDetectedSize] = useState<{ width: number; height: number } | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const [editingArtwork, setEditingArtwork] = useState<Artwork | null>(null);
-  const [selectedFilterTagId, setSelectedFilterTagId] = useState<string | null>(null);
+  const [selectedFilterTagIds, setSelectedFilterTagIds] = useState<string[]>([]);
   const [showTagManager, setShowTagManager] = useState(false);
   const [newTagForm, setNewTagForm] = useState({ name: '', color: '#E91E63', category: 'style' });
   const [editingTag, setEditingTag] = useState<ArtworkTag | null>(null);
   const [expandCategories, setExpandCategories] = useState<Record<string, boolean>>({});
+  const [isBatchMode, setIsBatchMode] = useState(false);
+  const [showSortMenu, setShowSortMenu] = useState(false);
+  const [showBatchImport, setShowBatchImport] = useState(false);
+  const [importJson, setImportJson] = useState('');
+  const [importResult, setImportResult] = useState<BatchImportResult | null>(null);
+  const [deleteValidation, setDeleteValidation] = useState<ArtworkDeletionValidation | null>(null);
+  const [artworkToDelete, setArtworkToDelete] = useState<string | null>(null);
+  const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
+  const [showDeleteSuccess, setShowDeleteSuccess] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imagePreviewRef = useRef<HTMLImageElement>(null);
 
   const filteredArtworks = useMemo(() => {
-    let artworks = getFilteredArtworks();
-    if (selectedFilterTagId) {
-      artworks = artworks.filter((a) => a.tagIds.includes(selectedFilterTagId));
-    }
-    return artworks;
-  }, [getFilteredArtworks, selectedFilterTagId]);
+    return filterAndSortArtworks(ingestionSearchQuery, selectedFilterTagIds);
+  }, [filterAndSortArtworks, ingestionSearchQuery, selectedFilterTagIds]);
 
   const groupedTags = useMemo(() => {
     const groups: Record<string, ArtworkTag[]> = {};
@@ -292,13 +319,84 @@ export const ArtworkIngestionWorkstation: React.FC = () => {
   }, [editingArtwork, formData, validateForm, updateArtworkWithTags, previewImage, resetForm]);
 
   const handleDeleteArtwork = useCallback(
-    (artworkId: string, title: string) => {
-      if (confirm(`确定要删除作品"${title}"吗？`)) {
-        removeArtwork(artworkId);
-      }
+    (artworkId: string, _title: string) => {
+      const validation = validateArtworkDeletion(artworkId);
+      setArtworkToDelete(artworkId);
+      setDeleteValidation(validation);
     },
-    [removeArtwork]
+    [validateArtworkDeletion]
   );
+
+  const confirmDelete = useCallback(
+    (force: boolean) => {
+      if (artworkToDelete) {
+        const success = removeArtworkWithValidation(artworkToDelete, force);
+        if (success) {
+          setShowDeleteSuccess(true);
+          setTimeout(() => setShowDeleteSuccess(false), 2000);
+        }
+      }
+      setDeleteValidation(null);
+      setArtworkToDelete(null);
+    },
+    [artworkToDelete, removeArtworkWithValidation]
+  );
+
+  const handleBatchDelete = useCallback(() => {
+    const ids = Array.from(selectedArtworkIds);
+    const result = batchRemoveArtworks(ids, 'safe');
+    if (result.deletedCount > 0) {
+      setShowDeleteSuccess(true);
+      setTimeout(() => setShowDeleteSuccess(false), 2000);
+    }
+    setShowBatchDeleteConfirm(false);
+    clearArtworkSelections();
+    setIsBatchMode(false);
+  }, [selectedArtworkIds, batchRemoveArtworks, clearArtworkSelections]);
+
+  const handleSortChange = (sortType: ArtworkSortType) => {
+    if (artworkSortType === sortType) {
+      setArtworkSortDirection(artworkSortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setArtworkSortType(sortType);
+    }
+    setShowSortMenu(false);
+  };
+
+  const toggleFilterTag = (tagId: string) => {
+    setSelectedFilterTagIds((prev) =>
+      prev.includes(tagId)
+        ? prev.filter((id) => id !== tagId)
+        : [...prev, tagId]
+    );
+  };
+
+  const clearFilterTags = () => {
+    setSelectedFilterTagIds([]);
+  };
+
+  const handleBatchImport = () => {
+    try {
+      const artworks = JSON.parse(importJson);
+      if (Array.isArray(artworks)) {
+        const result = batchAddArtworksWithTags(artworks);
+        setImportResult(result);
+        if (result.successCount > 0) {
+          setImportJson('');
+          setTimeout(() => setImportResult(null), 3000);
+        }
+      }
+    } catch {
+      alert('JSON 格式错误，请检查输入');
+    }
+  };
+
+  const SortIcon = () => {
+    if (artworkSortDirection === 'asc') {
+      return <ArrowUp className="w-3 h-3" />;
+    }
+    return <ArrowDown className="w-3 h-3" />;
+  };
 
   const renderIngestionPanel = () => (
     <div className="h-full flex flex-col">
@@ -698,62 +796,152 @@ export const ArtworkIngestionWorkstation: React.FC = () => {
           <ImageIcon className="w-5 h-5 text-gold" />
           作品库
         </h3>
-        <span className="text-xs text-white/40">
-          共 {filteredArtworks.length} 件作品
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-white/40">
+            共 {filteredArtworks.length} 件作品
+          </span>
+          {selectedFilterTagIds.length > 0 && (
+            <span className="text-xs text-gold/80 bg-gold/10 px-2 py-0.5 rounded-full">
+              已选 {selectedFilterTagIds.length} 个标签
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="mb-4 space-y-3">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
-          <input
-            type="text"
-            placeholder="搜索作品标题、艺术家、标签..."
-            value={ingestionSearchQuery}
-            onChange={(e) => setIngestionSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-gallery-bg border border-gallery-border rounded-lg text-sm text-white placeholder-white/40 focus:outline-none focus:border-gold/50 transition-colors"
-          />
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+            <input
+              type="text"
+              placeholder="搜索作品标题、艺术家、标签..."
+              value={ingestionSearchQuery}
+              onChange={(e) => setIngestionSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 bg-gallery-bg border border-gallery-border rounded-lg text-sm text-white placeholder-white/40 focus:outline-none focus:border-gold/50 transition-colors"
+            />
+          </div>
+          <div className="relative">
+            <button
+              onClick={() => setShowSortMenu(!showSortMenu)}
+              className="flex items-center gap-1 px-3 py-2 bg-gallery-bg border border-gallery-border rounded-lg text-sm text-white/70 hover:text-white hover:border-gold/50 transition-colors"
+            >
+              <ArrowUpDown className="w-4 h-4" />
+              <SortIcon />
+            </button>
+            {showSortMenu && (
+              <div className="absolute right-0 top-full mt-1 bg-gallery-bg border border-gallery-border rounded-lg shadow-xl z-20 min-w-[140px] overflow-hidden">
+                {ARTWORK_SORT_TYPES.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => handleSortChange(item.id)}
+                    className={`w-full px-3 py-2 text-left text-sm hover:bg-white/5 transition-colors flex items-center justify-between ${
+                      artworkSortType === item.id ? 'text-gold bg-gold/10' : 'text-white/80'
+                    }`}
+                  >
+                    <span>{item.label}</span>
+                    {artworkSortType === item.id && <SortIcon />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => setIsBatchMode(!isBatchMode)}
+            className={`p-2 rounded-lg border transition-colors ${
+              isBatchMode
+                ? 'bg-gold/20 border-gold/50 text-gold'
+                : 'bg-gallery-bg border-gallery-border text-white/70 hover:text-white hover:border-gold/50'
+            }`}
+            title="批量模式"
+          >
+            <CheckSquare className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setShowBatchImport(true)}
+            className="p-2 bg-gallery-bg border border-gallery-border rounded-lg text-white/70 hover:text-gold hover:border-gold/50 transition-colors"
+            title="批量导入"
+          >
+            <FileJson className="w-4 h-4" />
+          </button>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Filter className="w-3.5 h-3.5 text-white/40" />
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              onClick={() => setSelectedFilterTagId(null)}
-              className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
-                selectedFilterTagId === null
-                  ? 'bg-gold/20 text-gold border-gold/40'
-                  : 'border-gallery-border text-white/50 hover:text-white/70'
-              }`}
-            >
-              全部
-            </button>
-            {artworkTags.slice(0, 8).map((tag) => {
-              const count = getArtworksByTagId(tag.id).length;
-              return (
-                <button
-                  key={tag.id}
-                  onClick={() => setSelectedFilterTagId(tag.id === selectedFilterTagId ? null : tag.id)}
-                  className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
-                    selectedFilterTagId === tag.id
-                      ? 'shadow-md'
-                      : 'bg-transparent hover:bg-white/5'
-                  }`}
-                  style={
-                    selectedFilterTagId === tag.id
-                      ? getTagColorClass(tag.color)
-                      : {
-                          borderColor: `${tag.color}30`,
-                          color: `${tag.color}aa`,
-                        }
-                  }
-                >
-                  {tag.name} ({count})
-                </button>
-              );
-            })}
+        <div className="flex items-start gap-2">
+          <Filter className="w-3.5 h-3.5 text-white/40 mt-1.5" />
+          <div className="flex-1">
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                onClick={clearFilterTags}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+                  selectedFilterTagIds.length === 0
+                    ? 'bg-gold/20 text-gold border-gold/40'
+                    : 'border-gallery-border text-white/50 hover:text-white/70'
+                }`}
+              >
+                全部
+              </button>
+              {artworkTags.map((tag) => {
+                const count = getArtworksByTagId(tag.id).length;
+                const isSelected = selectedFilterTagIds.includes(tag.id);
+                return (
+                  <button
+                    key={tag.id}
+                    onClick={() => toggleFilterTag(tag.id)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+                      isSelected
+                        ? 'shadow-md'
+                        : 'bg-transparent hover:bg-white/5'
+                    }`}
+                    style={
+                      isSelected
+                        ? getTagColorClass(tag.color)
+                        : {
+                            borderColor: `${tag.color}30`,
+                            color: `${tag.color}aa`,
+                          }
+                    }
+                  >
+                    {tag.name} ({count})
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
+
+        {isBatchMode && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="flex items-center justify-between px-3 py-2 bg-gold/10 border border-gold/30 rounded-lg"
+          >
+            <span className="text-sm text-white/80">
+              已选择 <span className="text-gold font-medium">{selectedArtworkIds.size}</span> / {filteredArtworks.length} 件作品
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => selectAllArtworks(filteredArtworks.map((a) => a.id))}
+                className="text-xs px-2 py-1 rounded bg-white/10 text-white/80 hover:bg-white/20 transition-colors"
+              >
+                全选
+              </button>
+              <button
+                onClick={clearArtworkSelections}
+                className="text-xs px-2 py-1 rounded bg-white/10 text-white/80 hover:bg-white/20 transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => setShowBatchDeleteConfirm(true)}
+                disabled={selectedArtworkIds.size === 0}
+                className="text-xs px-2 py-1 rounded bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Trash2 className="w-3 h-3 inline mr-1" />
+                批量删除
+              </button>
+            </div>
+          </motion.div>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto pr-1">
@@ -773,9 +961,23 @@ export const ArtworkIngestionWorkstation: React.FC = () => {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95 }}
-                  className="card p-2 group"
+                  className={`card p-2 group ${
+                    selectedArtworkIds.has(artwork.id) ? 'ring-2 ring-gold' : ''
+                  }`}
                 >
                   <div className="flex gap-3">
+                    {isBatchMode && (
+                      <button
+                        onClick={() => toggleArtworkSelection(artwork.id)}
+                        className="mt-5 p-1"
+                      >
+                        {selectedArtworkIds.has(artwork.id) ? (
+                          <CheckSquare className="w-5 h-5 text-gold" />
+                        ) : (
+                          <Square className="w-5 h-5 text-white/30" />
+                        )}
+                      </button>
+                    )}
                     <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-gallery-bg">
                       <img
                         src={artwork.imageUrl}
@@ -855,6 +1057,247 @@ export const ArtworkIngestionWorkstation: React.FC = () => {
           添加入库新作品
         </button>
       </div>
+
+      {/* 删除确认对话框 */}
+      <AnimatePresence>
+        {deleteValidation && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-gallery-bg border border-gallery-border rounded-xl p-6 max-w-md w-full"
+            >
+              <div className="flex items-start gap-3 mb-4">
+                <div className="p-2 bg-red-500/20 rounded-lg flex-shrink-0">
+                  <AlertTriangle className="w-6 h-6 text-red-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-white mb-1">确认删除</h3>
+                  <p className="text-sm text-white/70">
+                    {deleteValidation.canDelete
+                      ? '确定要删除该作品吗？此操作不可恢复。'
+                      : '该作品已被以下内容引用，删除可能影响相关数据：'}
+                  </p>
+                </div>
+              </div>
+
+              {!deleteValidation.canDelete && (
+                <div className="mb-4 space-y-2">
+                  {deleteValidation.usageInfo.map((info, idx) => (
+                    <div key={idx} className="px-3 py-2 bg-gallery-hover rounded-lg">
+                      <p className="text-sm text-white/90">
+                        {info.type === 'scheme' && '展览方案: '}
+                        {info.type === 'theme' && '主题集合: '}
+                        {info.type === 'project' && '策展项目: '}
+                        <span className="text-gold">{info.name}</span>
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setDeleteValidation(null);
+                    setArtworkToDelete(null);
+                  }}
+                  className="flex-1 btn-secondary"
+                >
+                  取消
+                </button>
+                {deleteValidation.canDelete ? (
+                  <button
+                    onClick={() => confirmDelete(false)}
+                    className="flex-1 bg-red-500 hover:bg-red-600 text-white py-2 rounded-lg transition-colors"
+                  >
+                    确认删除
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => confirmDelete(false)}
+                      className="flex-1 btn-secondary"
+                      disabled
+                    >
+                      作品被使用，无法删除
+                    </button>
+                    <button
+                      onClick={() => confirmDelete(true)}
+                      className="flex-1 bg-red-500 hover:bg-red-600 text-white py-2 rounded-lg transition-colors text-sm"
+                    >
+                      强制删除
+                    </button>
+                  </>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 批量删除确认对话框 */}
+      <AnimatePresence>
+        {showBatchDeleteConfirm && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-gallery-bg border border-gallery-border rounded-xl p-6 max-w-md w-full"
+            >
+              <div className="flex items-start gap-3 mb-4">
+                <div className="p-2 bg-red-500/20 rounded-lg flex-shrink-0">
+                  <AlertTriangle className="w-6 h-6 text-red-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-white mb-1">批量删除</h3>
+                  <p className="text-sm text-white/70">
+                    确定要删除选中的 <span className="text-gold font-medium">{selectedArtworkIds.size}</span> 件作品吗？
+                    被使用的作品将被跳过。此操作不可恢复。
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowBatchDeleteConfirm(false)}
+                  className="flex-1 btn-secondary"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleBatchDelete}
+                  className="flex-1 bg-red-500 hover:bg-red-600 text-white py-2 rounded-lg transition-colors"
+                >
+                  确认删除
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 批量导入对话框 */}
+      <AnimatePresence>
+        {showBatchImport && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-gallery-bg border border-gallery-border rounded-xl p-6 max-w-2xl w-full"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                  <FileJson className="w-5 h-5 text-gold" />
+                  批量导入作品
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowBatchImport(false);
+                    setImportJson('');
+                    setImportResult(null);
+                  }}
+                  className="p-1 hover:bg-white/10 rounded transition-colors"
+                >
+                  <X className="w-5 h-5 text-white/60" />
+                </button>
+              </div>
+
+              {importResult && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  className="mb-4"
+                >
+                  <div className={`p-4 rounded-lg ${
+                    importResult.successCount > 0 ? 'bg-green-500/20 border border-green-500/30' : 'bg-red-500/20 border border-red-500/30'
+                  }`}>
+                    <p className="text-sm text-white/90 mb-2">
+                      导入完成: 成功 <span className="text-green-400 font-medium">{importResult.successCount}</span> 条，
+                      失败 <span className="text-red-400 font-medium">{importResult.failCount}</span> 条
+                    </p>
+                    {importResult.errors.length > 0 && (
+                      <div className="space-y-1 max-h-32 overflow-y-auto">
+                        {importResult.errors.map((error, idx) => (
+                          <p key={idx} className="text-xs text-red-400">
+                            第 {error.index + 1} 条: {error.errors.join(', ')}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+
+              <div className="mb-4">
+                <label className="block text-xs text-white/60 mb-2">
+                  JSON 数据格式
+                </label>
+                <div className="p-3 bg-gallery-hover rounded-lg text-xs text-white/50 mb-2">
+                  <pre className="whitespace-pre-wrap">{`[
+  {
+    "title": "作品标题",
+    "artist": "艺术家",
+    "year": 2024,
+    "imageUrl": "图片URL",
+    "width": 100,
+    "height": 80,
+    "medium": "媒介",
+    "description": "描述",
+    "tags": ["标签1", "标签2"]
+  }
+]`}</pre>
+                </div>
+                <textarea
+                  value={importJson}
+                  onChange={(e) => setImportJson(e.target.value)}
+                  placeholder="粘贴 JSON 数据..."
+                  rows={8}
+                  className="w-full input-field resize-none font-mono text-xs"
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setShowBatchImport(false);
+                    setImportJson('');
+                    setImportResult(null);
+                  }}
+                  className="flex-1 btn-secondary"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleBatchImport}
+                  disabled={!importJson.trim()}
+                  className="flex-1 btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <FileJson className="w-4 h-4 inline mr-1" />
+                  导入
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 删除成功提示 */}
+      <AnimatePresence>
+        {showDeleteSuccess && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-green-500/90 text-white rounded-lg shadow-lg flex items-center gap-2"
+          >
+            <Check className="w-4 h-4" />
+            <span className="text-sm">删除成功</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 

@@ -63,6 +63,13 @@ import type {
   BatchOperationConfig,
   BatchOperationType,
   CompareViewState,
+  ArtworkSortType,
+  ArtworkDeletionValidation,
+  ArtworkUsageInfo,
+  BatchImportResult,
+  BatchImportError,
+  BatchDeleteResult,
+  BatchDeleteMode,
 } from '../types';
 import {
   DEFAULT_LIGHTING,
@@ -250,6 +257,20 @@ interface AppStore extends AppState {
   getFilteredArtworks: () => Artwork[];
   getArtworksByTagId: (tagId: string) => Artwork[];
   filterArtworks: (query: string) => Artwork[];
+  filterAndSortArtworks: (query?: string, tagIds?: string[], sortType?: ArtworkSortType, sortDirection?: 'asc' | 'desc') => Artwork[];
+  setArtworkSortType: (sortType: ArtworkSortType) => void;
+  setArtworkSortDirection: (direction: 'asc' | 'desc') => void;
+  toggleArtworkFilterTag: (tagId: string) => void;
+  clearArtworkFilterTags: () => void;
+  validateArtworkDeletion: (artworkId: string) => ArtworkDeletionValidation;
+  validateBatchArtworkDeletion: (artworkIds: string[]) => Record<string, ArtworkDeletionValidation>;
+  removeArtworkWithValidation: (artworkId: string, force?: boolean) => boolean;
+  batchRemoveArtworks: (artworkIds: string[], mode?: BatchDeleteMode) => BatchDeleteResult;
+  batchImportArtworks: (artworks: Array<Omit<Artwork, 'id' | 'createdAt' | 'updatedAt'>>) => BatchImportResult;
+  batchAddArtworksWithTags: (artworks: Array<Omit<Artwork, 'id' | 'createdAt' | 'updatedAt' | 'tagIds'> & { tagIds: string[] }>) => BatchImportResult;
+  toggleArtworkSelection: (artworkId: string, multiSelect?: boolean) => void;
+  selectAllArtworks: (artworkIds?: string[]) => void;
+  clearArtworkSelections: () => void;
   setWallDimensions: (dimensions: Partial<WallDimensions>) => void;
   setWallColor: (wallColor: Partial<WallColor>) => void;
   setAmbientLight: (ambientLight: AmbientLightTemplate) => void;
@@ -293,8 +314,6 @@ interface AppStore extends AppState {
   selectSceneRecommendation: (id: string | null) => void;
   generateSceneRecommendations: (artworkIds: string[]) => SceneRecommendation[];
   getSceneRecommendationsByArtwork: (artworkId: string) => SceneRecommendation[];
-  toggleArtworkSelection: (artworkId: string, multiSelect?: boolean) => void;
-  clearArtworkSelection: () => void;
   createThemeCollection: (data: Omit<ThemeCollection, 'id' | 'createdAt' | 'updatedAt' | 'viewCount' | 'useCount'>) => ThemeCollection;
   updateThemeCollection: (id: string, updates: Partial<ThemeCollection>) => void;
   deleteThemeCollection: (id: string) => void;
@@ -441,6 +460,9 @@ const getInitialState = (): AppState => {
     artworks: mockArtworks,
     selectedArtworkId: savedArtworkId || mockArtworks[0]?.id || null,
     selectedArtworkIds: new Set<string>(),
+    artworkSortType: 'createdAt',
+    artworkSortDirection: 'desc',
+    artworkFilterTagIds: [],
     lighting: savedLighting || DEFAULT_LIGHTING,
     material: savedMaterial || DEFAULT_MATERIAL,
     presets: migratedPresets,
@@ -2661,6 +2683,324 @@ export const useAppStore = create<AppStore>((set, get) => ({
     });
   },
 
+  filterAndSortArtworks: (query = '', tagIds = [], sortType, sortDirection) => {
+    const {
+      artworks,
+      artworkTags,
+      artworkSortType: stateSortType,
+      artworkSortDirection: stateSortDirection,
+      artworkFilterTagIds,
+    } = get();
+
+    const actualSortType = sortType || stateSortType;
+    const actualSortDirection = sortDirection || stateSortDirection;
+    const actualTagIds = tagIds.length > 0 ? tagIds : artworkFilterTagIds;
+
+    let filtered = [...artworks];
+
+    if (query.trim()) {
+      const lowerQuery = query.toLowerCase();
+      filtered = filtered.filter((artwork) => {
+        const matchesTitle = artwork.title.toLowerCase().includes(lowerQuery);
+        const matchesArtist = artwork.artist.toLowerCase().includes(lowerQuery);
+        const matchesMedium = artwork.medium.toLowerCase().includes(lowerQuery);
+        const matchesYear = artwork.year.toString().includes(lowerQuery);
+
+        const artworkTagNames = artwork.tagIds
+          .map((tagId) => {
+            const tag = artworkTags.find((t) => t.id === tagId);
+            return tag?.name.toLowerCase() || '';
+          })
+          .filter(Boolean);
+        const matchesTag = artworkTagNames.some((name) => name.includes(lowerQuery));
+
+        return matchesTitle || matchesArtist || matchesMedium || matchesYear || matchesTag;
+      });
+    }
+
+    if (actualTagIds.length > 0) {
+      filtered = filtered.filter((artwork) =>
+        actualTagIds.every((tagId) => artwork.tagIds.includes(tagId))
+      );
+    }
+
+    filtered.sort((a, b) => {
+      let comparison = 0;
+      switch (actualSortType) {
+        case 'title':
+          comparison = a.title.localeCompare(b.title, 'zh-CN');
+          break;
+        case 'artist':
+          comparison = a.artist.localeCompare(b.artist, 'zh-CN');
+          break;
+        case 'year':
+          comparison = a.year - b.year;
+          break;
+        case 'width':
+          comparison = a.width - b.width;
+          break;
+        case 'height':
+          comparison = a.height - b.height;
+          break;
+        case 'updatedAt':
+          comparison = a.updatedAt - b.updatedAt;
+          break;
+        case 'createdAt':
+        default:
+          comparison = a.createdAt - b.createdAt;
+          break;
+      }
+      return actualSortDirection === 'asc' ? comparison : -comparison;
+    });
+
+    return filtered;
+  },
+
+  setArtworkSortType: (sortType) => {
+    set({ artworkSortType: sortType });
+  },
+
+  setArtworkSortDirection: (direction) => {
+    set({ artworkSortDirection: direction });
+  },
+
+  toggleArtworkFilterTag: (tagId) => {
+    set((state) => {
+      const hasTag = state.artworkFilterTagIds.includes(tagId);
+      return {
+        artworkFilterTagIds: hasTag
+          ? state.artworkFilterTagIds.filter((id) => id !== tagId)
+          : [...state.artworkFilterTagIds, tagId],
+      };
+    });
+  },
+
+  clearArtworkFilterTags: () => {
+    set({ artworkFilterTagIds: [] });
+  },
+
+  validateArtworkDeletion: (artworkId) => {
+    const { gallerySchemes, themeCollections, curatorProjects } = get();
+    const usageInfo: ArtworkUsageInfo[] = [];
+
+    gallerySchemes.forEach((scheme) => {
+      const isUsed = scheme.wallArtworks.some((wa) => wa.artworkId === artworkId);
+      if (isUsed) {
+        usageInfo.push({ type: 'scheme', id: scheme.id, name: scheme.name });
+      }
+    });
+
+    themeCollections.forEach((theme) => {
+      if (theme.artworkIds.includes(artworkId)) {
+        usageInfo.push({ type: 'theme', id: theme.id, name: theme.name });
+      }
+    });
+
+    curatorProjects.forEach((project) => {
+      const hasArtwork = project.tags.includes(artworkId);
+      if (hasArtwork) {
+        usageInfo.push({ type: 'project', id: project.id, name: project.name });
+      }
+    });
+
+    return {
+      canDelete: usageInfo.length === 0,
+      usageInfo,
+    };
+  },
+
+  validateBatchArtworkDeletion: (artworkIds) => {
+    const results: Record<string, ArtworkDeletionValidation> = {};
+    artworkIds.forEach((id) => {
+      results[id] = get().validateArtworkDeletion(id);
+    });
+    return results;
+  },
+
+  removeArtworkWithValidation: (artworkId, force = false) => {
+    const validation = get().validateArtworkDeletion(artworkId);
+    if (!validation.canDelete && !force) {
+      return false;
+    }
+
+    const { gallerySchemes, themeCollections, curatorProjects } = get();
+
+    const newSchemes = gallerySchemes.map((scheme) => ({
+      ...scheme,
+      wallArtworks: scheme.wallArtworks.filter((wa) => wa.artworkId !== artworkId),
+      groups: scheme.groups.map((group) => ({
+        ...group,
+        artworkIds: group.artworkIds.filter((id) => id !== artworkId),
+      })),
+      updatedAt: Date.now(),
+    }));
+
+    const newThemes = themeCollections.map((theme) => ({
+      ...theme,
+      artworkIds: theme.artworkIds.filter((id) => id !== artworkId),
+      updatedAt: Date.now(),
+    }));
+
+    set((state) => ({
+      artworks: state.artworks.filter((a) => a.id !== artworkId),
+      selectedArtworkId: state.selectedArtworkId === artworkId ? null : state.selectedArtworkId,
+      selectedArtworkIds: new Set([...state.selectedArtworkIds].filter((id) => id !== artworkId)),
+      gallerySchemes: newSchemes,
+      themeCollections: newThemes,
+    }));
+
+    saveGallerySchemes(newSchemes);
+    saveThemeCollections(newThemes);
+
+    return true;
+  },
+
+  batchRemoveArtworks: (artworkIds, mode = 'safe') => {
+    const { validateBatchArtworkDeletion, removeArtworkWithValidation } = get();
+    const validations = validateBatchArtworkDeletion(artworkIds);
+    const skippedArtworks: { id: string; title: string; reason: string }[] = [];
+    let deletedCount = 0;
+
+    artworkIds.forEach((id) => {
+      const artwork = get().artworks.find((a) => a.id === id);
+      if (!artwork) return;
+
+      const validation = validations[id];
+      if (mode === 'safe' && !validation.canDelete) {
+        skippedArtworks.push({
+          id,
+          title: artwork.title,
+          reason: `正在被 ${validation.usageInfo.length} 个地方使用`,
+        });
+        return;
+      }
+
+      const success = removeArtworkWithValidation(id, true);
+      if (success) {
+        deletedCount++;
+      } else {
+        skippedArtworks.push({
+          id,
+          title: artwork.title,
+          reason: '删除失败',
+        });
+      }
+    });
+
+    return {
+      deletedCount,
+      skippedCount: skippedArtworks.length,
+      totalCount: artworkIds.length,
+      skippedArtworks,
+    };
+  },
+
+  batchImportArtworks: (artworks) => {
+    const errors: BatchImportError[] = [];
+    const importedArtworkIds: string[] = [];
+    const now = Date.now();
+
+    artworks.forEach((artwork, index) => {
+      const artworkErrors: string[] = [];
+
+      if (!artwork.title?.trim()) {
+        artworkErrors.push('标题不能为空');
+      }
+      if (!artwork.artist?.trim()) {
+        artworkErrors.push('艺术家不能为空');
+      }
+      if (!artwork.year || artwork.year <= 0) {
+        artworkErrors.push('年份无效');
+      }
+      if (!artwork.imageUrl?.trim()) {
+        artworkErrors.push('图片URL不能为空');
+      }
+      if (!artwork.width || artwork.width <= 0) {
+        artworkErrors.push('宽度无效');
+      }
+      if (!artwork.height || artwork.height <= 0) {
+        artworkErrors.push('高度无效');
+      }
+      if (!artwork.medium?.trim()) {
+        artworkErrors.push('创作媒介不能为空');
+      }
+
+      if (artworkErrors.length > 0) {
+        errors.push({
+          index,
+          title: artwork.title,
+          errors: artworkErrors,
+        });
+        return;
+      }
+
+      const newArtwork: Artwork = {
+        ...artwork,
+        id: `artwork-${now}-${index}`,
+        tagIds: artwork.tagIds || [],
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      set((state) => ({
+        artworks: [...state.artworks, newArtwork],
+      }));
+
+      importedArtworkIds.push(newArtwork.id);
+    });
+
+    return {
+      successCount: importedArtworkIds.length,
+      failCount: errors.length,
+      totalCount: artworks.length,
+      errors,
+      importedArtworkIds,
+    };
+  },
+
+  batchAddArtworksWithTags: (artworks) => {
+    const now = Date.now();
+    const convertedArtworks = artworks.map((a) => ({
+      title: a.title,
+      artist: a.artist,
+      year: a.year,
+      imageUrl: a.imageUrl,
+      width: a.width,
+      height: a.height,
+      depth: a.depth,
+      medium: a.medium,
+      description: a.description,
+      tagIds: a.tagIds,
+    }));
+    return get().batchImportArtworks(convertedArtworks);
+  },
+
+  toggleArtworkSelection: (artworkId, _multiSelect = true) => {
+    set((state) => {
+      const newSelection = new Set(state.selectedArtworkIds);
+      if (newSelection.has(artworkId)) {
+        newSelection.delete(artworkId);
+      } else {
+        newSelection.add(artworkId);
+      }
+      return { selectedArtworkIds: newSelection };
+    });
+  },
+
+  selectAllArtworks: (artworkIds) => {
+    if (artworkIds && artworkIds.length > 0) {
+      set({ selectedArtworkIds: new Set(artworkIds) });
+    } else {
+      const { filterAndSortArtworks, ingestionSearchQuery } = get();
+      const filtered = filterAndSortArtworks(ingestionSearchQuery);
+      set({ selectedArtworkIds: new Set(filtered.map((a) => a.id)) });
+    }
+  },
+
+  clearArtworkSelections: () => {
+    set({ selectedArtworkIds: new Set() });
+  },
+
   setWallDimensions: (dimensions) => {
     set((state) => {
       const newConfig = {
@@ -3110,27 +3450,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
   getSceneRecommendationsByArtwork: (artworkId) => {
     const { sceneRecommendations } = get();
     return sceneRecommendations.filter((s) => s.artworkIds.includes(artworkId));
-  },
-
-  toggleArtworkSelection: (artworkId, multiSelect = false) => {
-    set((state) => {
-      const newSelected = new Set(state.selectedArtworkIds);
-      if (multiSelect) {
-        if (newSelected.has(artworkId)) {
-          newSelected.delete(artworkId);
-        } else {
-          newSelected.add(artworkId);
-        }
-      } else {
-        newSelected.clear();
-        newSelected.add(artworkId);
-      }
-      return { selectedArtworkIds: newSelected };
-    });
-  },
-
-  clearArtworkSelection: () => {
-    set({ selectedArtworkIds: new Set() });
   },
 
   createThemeCollection: (data) => {
