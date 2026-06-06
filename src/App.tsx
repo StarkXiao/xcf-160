@@ -25,6 +25,7 @@ import { CompareView } from './components/CompareView/CompareView';
 import { StoragePanel } from './components/StoragePanel/StoragePanel';
 import { SchemeOrchestrator } from './components/SchemeOrchestrator/SchemeOrchestrator';
 import { CuratorHub } from './components/CuratorHub/CuratorHub';
+import { ProposalShareView } from './components/ProposalView/ProposalShareView';
 import type { AppState, AppMode } from './types';
 import { APP_MODE_LABELS, PROJECT_STATUS_LABELS } from './types';
 
@@ -64,6 +65,7 @@ export default function App() {
   const [showCuratorHub, setShowCuratorHub] = useState(false);
   const [showModeDropdown, setShowModeDropdown] = useState(false);
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
+  const [shareToken, setShareToken] = useState<string | null>(null);
 
   const currentScheme = gallerySchemes.find((s) => s.id === currentSchemeId);
   const currentProject = curatorProjects.find((p) => p.id === currentProjectId);
@@ -106,6 +108,14 @@ export default function App() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const share = params.get('share');
+    if (share) {
+      setShareToken(share);
+    }
+  }, []);
+
   const renderPanel = () => {
     switch (activePanel) {
       case 'scheme':
@@ -136,6 +146,20 @@ export default function App() {
       <AnimatePresence>
         {showCuratorHub && (
           <CuratorHub onClose={() => setShowCuratorHub(false)} />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {shareToken && (
+          <ProposalShareView
+            shareToken={shareToken}
+            onClose={() => {
+              setShareToken(null);
+              const url = new URL(window.location.href);
+              url.searchParams.delete('share');
+              window.history.replaceState({}, '', url.toString());
+            }}
+          />
         )}
       </AnimatePresence>
 

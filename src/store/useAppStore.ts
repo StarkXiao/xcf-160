@@ -14,6 +14,8 @@ import type {
   CuratorProject,
   ProjectVersion,
   ProjectViewTab,
+  CustomerProposal,
+  ProposalArtworkSection,
 } from '../types';
 import {
   DEFAULT_LIGHTING,
@@ -25,6 +27,9 @@ import {
   DEFAULT_PROGRESS_STEPS,
   EXPORT_FORMAT_LABELS,
   EXPORT_RESOLUTION_PIXELS,
+  LIGHT_TYPE_LABELS,
+  FRAME_MATERIAL_LABELS,
+  WALL_MATERIAL_LABELS,
 } from '../types';
 import type {
   ArtworkGroup,
@@ -57,6 +62,12 @@ import {
   exportProject as exportProjectUtil,
   importProject as importProjectUtil,
   type ProjectExportData,
+  loadProposals,
+  saveProposals,
+  loadCurrentProposalId,
+  saveCurrentProposalId,
+  exportProposal as exportProposalUtil,
+  generateShareLink as generateShareLinkUtil,
 } from '../utils/storage';
 
 interface AppStore extends AppState {
@@ -128,6 +139,13 @@ interface AppStore extends AppState {
   deleteVersionComment: (projectId: string, commentId: string) => void;
   compareVersions: (projectId: string, versionId1: string, versionId2: string) => { version1: ProjectVersion; version2: ProjectVersion; differences: string[] } | null;
   exportProjectPreview: (projectId: string, config: ExportConfig) => void;
+  createProposal: (projectId: string, schemeId: string, title: string) => CustomerProposal;
+  updateProposal: (proposalId: string, updates: Partial<CustomerProposal>) => void;
+  deleteProposal: (proposalId: string) => void;
+  setCurrentProposal: (proposalId: string | null) => void;
+  generateProposalShareLink: (proposalId: string, expiresInDays?: number) => string;
+  exportProposal: (proposalId: string) => void;
+  regenerateProposalArtworkDescription: (proposalId: string, artworkId: string) => void;
 }
 
 const getInitialState = (): AppState => {
@@ -140,6 +158,8 @@ const getInitialState = (): AppState => {
   const savedAppMode = loadAppMode();
   const savedProjects = loadCuratorProjects();
   const savedCurrentProjectId = loadCurrentProjectId();
+  const savedProposals = loadProposals();
+  const savedCurrentProposalId = loadCurrentProposalId();
 
   const schemes = savedSchemes.length > 0 ? savedSchemes : mockGallerySchemes;
   const projects = savedProjects.length > 0 ? savedProjects : mockCuratorProjects;
@@ -167,6 +187,8 @@ const getInitialState = (): AppState => {
     curatorHubTab: 'overview',
     selectedGroupId: null,
     selectedVersionId: null,
+    proposals: savedProposals,
+    currentProposalId: savedCurrentProposalId,
   };
 };
 
@@ -1684,5 +1706,184 @@ export const useAppStore = create<AppStore>((set, get) => ({
     } else {
       alert(`${EXPORT_FORMAT_LABELS[config.format]} 格式导出功能正在开发中，当前支持 JSON 和图片格式`);
     }
+  },
+
+  createProposal: (projectId, schemeId, title) => {
+    const { gallerySchemes, artworks, proposals } = get();
+    const scheme = gallerySchemes.find((s) => s.id === schemeId);
+    if (!scheme) return undefined as unknown as CustomerProposal;
+
+    const generateLightingDescription = (lighting: LightingConfig) => {
+      const typeLabel = LIGHT_TYPE_LABELS[lighting.type];
+      const intensity = Math.round(lighting.intensity * 100);
+      return `采用${typeLabel}，色温 ${lighting.colorTemperature}K，亮度 ${intensity}%，光束角度 ${lighting.angle}°。此配置能够突出作品的质感，营造专业的展览氛围。`;
+    };
+
+    const generateMaterialDescription = (material: MaterialConfig) => {
+      const frameLabel = FRAME_MATERIAL_LABELS[material.frameMaterial];
+      const wallLabel = WALL_MATERIAL_LABELS[material.wallMaterial];
+      return `搭配${frameLabel}画框与${wallLabel}墙面，反射率 ${Math.round(material.reflectivity * 100)}%，粗糙度 ${Math.round(material.roughness * 100)}%，完美平衡作品的视觉呈现与空间的整体协调。`;
+    };
+
+    const artworkSections: ProposalArtworkSection[] = scheme.wallArtworks.map((wa) => {
+      const artwork = artworks.find((a) => a.id === wa.artworkId);
+      if (!artwork) return null;
+
+      return {
+        artworkId: artwork.id,
+        title: artwork.title,
+        artist: artwork.artist,
+        year: artwork.year,
+        medium: artwork.medium,
+        description: artwork.description || `这件${artwork.medium}作品展现了艺术家独特的创作视角和艺术风格。`,
+        imageUrl: artwork.imageUrl,
+        lightingDescription: generateLightingDescription(wa.lighting),
+        materialDescription: generateMaterialDescription(wa.material),
+        curatorNote: `这件作品在展览中占据重要位置，通过精心设计的灯光和材质搭配，将其艺术价值最大化呈现。`,
+      };
+    }).filter(Boolean) as ProposalArtworkSection[];
+
+    const avgColorTemp = Math.round(
+      scheme.wallArtworks.reduce((sum, wa) => sum + wa.lighting.colorTemperature, 0) /
+      (scheme.wallArtworks.length || 1)
+    );
+    const avgIntensity = Math.round(
+      (scheme.wallArtworks.reduce((sum, wa) => sum + wa.lighting.intensity, 0) /
+        (scheme.wallArtworks.length || 1)) * 100
+    );
+
+    const newProposal: CustomerProposal = {
+      id: `proposal-${Date.now()}`,
+      projectId,
+      schemeId,
+      title,
+      subtitle: '专业展览方案建议书',
+      introduction: `尊敬的客户，感谢您对我们策展方案的关注。本提案基于您的需求，为您精心设计了一套完整的展览呈现方案。我们从作品特点出发，结合空间美学与灯光艺术，为每件作品量身定制最佳展示效果，力求将艺术价值完美呈现。`,
+      artworks: artworkSections,
+      lightingSection: {
+        title: '灯光设计理念',
+        description: '我们采用分层照明设计理念，结合重点照明与环境照明，为每件作品营造独特的视觉体验。灯光设计充分考虑作品材质、色彩与展示空间的关系，确保最佳观赏效果。',
+        specifications: [
+          { label: '平均色温', value: `${avgColorTemp}K` },
+          { label: '平均亮度', value: `${avgIntensity}%` },
+          { label: '灯光策略', value: scheme.lightingStrategy.mode === 'uniform' ? '统一灯光' : scheme.lightingStrategy.mode === 'individual' ? '独立灯光' : '分区灯光' },
+          { label: '作品数量', value: `${scheme.wallArtworks.length} 件` },
+        ],
+      },
+      materialSection: {
+        title: '材质与装裱建议',
+        description: '材质选择是展览呈现的重要环节。我们根据作品风格、尺寸和展示环境，为您推荐最适合的画框材质和墙面处理方式，确保每件作品都能得到完美衬托。',
+        frameRecommendation: {
+          material: scheme.wallMaterial === 'concrete' ? 'metal' : scheme.wallMaterial === 'glossy' ? 'gold' : 'wood',
+          reason: scheme.wallMaterial === 'concrete'
+            ? '金属画框与水泥墙面形成现代感对话，突显当代艺术气质'
+            : scheme.wallMaterial === 'glossy'
+            ? '金色画框与高光墙面相得益彰，营造奢华典雅氛围'
+            : '木质画框温润质朴，与哑光墙面完美融合，展现经典美学',
+        },
+        wallRecommendation: {
+          material: scheme.wallMaterial,
+          reason: `${WALL_MATERIAL_LABELS[scheme.wallMaterial]}墙面能够最大程度衬托作品的色彩和质感，同时保持空间的整体协调性。`,
+        },
+      },
+      conclusion: '我们相信，通过专业的灯光设计、精心的材质选择和合理的空间布局，本次展览将为观众带来一场难忘的艺术盛宴。期待与您进一步沟通，共同完善这一方案。',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    const newProposals = [...proposals, newProposal];
+    set({ proposals: newProposals, currentProposalId: newProposal.id });
+    saveProposals(newProposals);
+    saveCurrentProposalId(newProposal.id);
+    return newProposal;
+  },
+
+  updateProposal: (proposalId, updates) => {
+    const { proposals } = get();
+    const newProposals = proposals.map((p) =>
+      p.id === proposalId ? { ...p, ...updates, updatedAt: Date.now() } : p
+    );
+    set({ proposals: newProposals });
+    saveProposals(newProposals);
+  },
+
+  deleteProposal: (proposalId) => {
+    const { proposals, currentProposalId } = get();
+    const newProposals = proposals.filter((p) => p.id !== proposalId);
+    const newCurrentId = currentProposalId === proposalId
+      ? (newProposals[0]?.id || null)
+      : currentProposalId;
+    set({ proposals: newProposals, currentProposalId: newCurrentId });
+    saveProposals(newProposals);
+    if (newCurrentId) saveCurrentProposalId(newCurrentId);
+  },
+
+  setCurrentProposal: (proposalId) => {
+    set({ currentProposalId: proposalId });
+    if (proposalId) saveCurrentProposalId(proposalId);
+  },
+
+  generateProposalShareLink: (proposalId, expiresInDays = 7) => {
+    const { proposals } = get();
+    const proposal = proposals.find((p) => p.id === proposalId);
+    if (!proposal) return '';
+
+    const shareToken = Math.random().toString(36).substring(2, 15) +
+      Math.random().toString(36).substring(2, 15);
+    const expiresAt = Date.now() + expiresInDays * 24 * 60 * 60 * 1000;
+
+    const updatedProposal = {
+      ...proposal,
+      shareToken,
+      shareExpiresAt: expiresAt,
+      updatedAt: Date.now(),
+    };
+
+    const newProposals = proposals.map((p) =>
+      p.id === proposalId ? updatedProposal : p
+    );
+    set({ proposals: newProposals });
+    saveProposals(newProposals);
+
+    return generateShareLinkUtil(updatedProposal);
+  },
+
+  exportProposal: (proposalId) => {
+    const { proposals } = get();
+    const proposal = proposals.find((p) => p.id === proposalId);
+    if (!proposal) return;
+    exportProposalUtil(proposal);
+  },
+
+  regenerateProposalArtworkDescription: (proposalId, artworkId) => {
+    const { proposals, artworks } = get();
+    const proposal = proposals.find((p) => p.id === proposalId);
+    if (!proposal) return;
+
+    const artwork = artworks.find((a) => a.id === artworkId);
+    if (!artwork) return;
+
+    const newArtworks = proposal.artworks.map((aw) => {
+      if (aw.artworkId === artworkId) {
+        return {
+          ...aw,
+          curatorNote: `这件${artwork.medium}作品展现了${artwork.artist}在${artwork.year}年的创作巅峰。我们通过精心设计的呈现方式，将作品的艺术内涵和视觉冲击力最大化。`,
+          description: artwork.description || aw.description,
+        };
+      }
+      return aw;
+    });
+
+    const updatedProposal = {
+      ...proposal,
+      artworks: newArtworks,
+      updatedAt: Date.now(),
+    };
+
+    const newProposals = proposals.map((p) =>
+      p.id === proposalId ? updatedProposal : p
+    );
+    set({ proposals: newProposals });
+    saveProposals(newProposals);
   },
 }));

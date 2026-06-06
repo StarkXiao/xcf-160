@@ -51,6 +51,7 @@ import { ArtworkGroupManager } from '../ArtworkGroupManager/ArtworkGroupManager'
 import { ProgressTracker } from '../ProgressTracker/ProgressTracker';
 import { VersionManager } from '../VersionManager/VersionManager';
 import { ExportPreview } from '../ExportPreview/ExportPreview';
+import { ProposalView } from '../ProposalView/ProposalView';
 
 interface CuratorHubProps {
   onClose: () => void;
@@ -1038,6 +1039,18 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
         return <VersionManager projectId={currentProjectId} />;
       case 'export':
         return <ExportPreview projectId={currentProjectId} />;
+      case 'proposal':
+        return currentProjectId ? (
+          <ProposalView projectId={currentProjectId} />
+        ) : (
+          <div className="flex items-center justify-center h-full text-white/40">
+            <div className="text-center">
+              <AlertCircle className="w-12 h-12 mx-auto mb-4 text-white/20" />
+              <p className="text-white/50 mb-2">请先选择一个项目</p>
+              <p className="text-white/30 text-xs">在项目列表中选择或创建项目</p>
+            </div>
+          </div>
+        );
       default:
         return null;
     }
@@ -1138,6 +1151,7 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
               {tab.id === 'progress' && <TrendingUp className="w-4 h-4" />}
               {tab.id === 'versions' && <GitCompare className="w-4 h-4" />}
               {tab.id === 'export' && <Eye className="w-4 h-4" />}
+              {tab.id === 'proposal' && <FileText className="w-4 h-4" />}
               {tab.label}
             </button>
           ))}

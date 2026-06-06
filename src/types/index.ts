@@ -160,7 +160,59 @@ export interface CuratorProject {
 export type SchemePanelTab = 'layout' | 'lighting' | 'snapshots' | 'groups' | 'progress';
 export type AppMode = 'artwork' | 'curator';
 export type ProjectViewTab = 'projects' | 'schemes' | 'versions' | 'progress' | 'export';
-export type CuratorHubTab = 'overview' | 'groups' | 'progress' | 'versions' | 'export';
+export type CuratorHubTab = 'overview' | 'groups' | 'progress' | 'versions' | 'export' | 'proposal';
+
+export interface ProposalLightingSection {
+  title: string;
+  description: string;
+  specifications: {
+    label: string;
+    value: string;
+  }[];
+}
+
+export interface ProposalMaterialSection {
+  title: string;
+  description: string;
+  frameRecommendation: {
+    material: FrameMaterial;
+    reason: string;
+  };
+  wallRecommendation: {
+    material: WallMaterial;
+    reason: string;
+  };
+}
+
+export interface ProposalArtworkSection {
+  artworkId: string;
+  title: string;
+  artist: string;
+  year: number;
+  medium: string;
+  description: string;
+  imageUrl: string;
+  lightingDescription: string;
+  materialDescription: string;
+  curatorNote: string;
+}
+
+export interface CustomerProposal {
+  id: string;
+  projectId: string;
+  schemeId: string;
+  title: string;
+  subtitle: string;
+  introduction: string;
+  artworks: ProposalArtworkSection[];
+  lightingSection: ProposalLightingSection;
+  materialSection: ProposalMaterialSection;
+  conclusion: string;
+  createdAt: number;
+  updatedAt: number;
+  shareToken?: string;
+  shareExpiresAt?: number;
+}
 
 export interface AppState {
   artworks: Artwork[];
@@ -182,6 +234,8 @@ export interface AppState {
   curatorHubTab: CuratorHubTab;
   selectedGroupId: string | null;
   selectedVersionId: string | null;
+  proposals: CustomerProposal[];
+  currentProposalId: string | null;
 }
 
 export const LIGHT_TYPE_LABELS: Record<LightType, string> = {
@@ -292,6 +346,7 @@ export const CURATOR_HUB_TABS: { id: CuratorHubTab; label: string }[] = [
   { id: 'progress', label: '布展进度' },
   { id: 'versions', label: '版本历史' },
   { id: 'export', label: '预览输出' },
+  { id: 'proposal', label: '客户提案' },
 ];
 
 export const DEFAULT_PROGRESS_STEPS: Omit<ProgressStep, 'id'>[] = [

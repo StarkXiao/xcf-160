@@ -1,4 +1,4 @@
-import type { Preset, LightingConfig, MaterialConfig, GalleryScheme, CuratorProject } from '../types';
+import type { Preset, LightingConfig, MaterialConfig, GalleryScheme, CuratorProject, CustomerProposal } from '../types';
 
 const PRESETS_KEY = 'artwork_preview_presets';
 const LAST_ARTWORK_KEY = 'artwork_preview_last_artwork';
@@ -9,6 +9,8 @@ const CURRENT_SCHEME_KEY = 'artwork_preview_current_scheme';
 const APP_MODE_KEY = 'artwork_preview_app_mode';
 const CURATOR_PROJECTS_KEY = 'artwork_preview_curator_projects';
 const CURRENT_PROJECT_KEY = 'artwork_preview_current_project';
+const PROPOSALS_KEY = 'artwork_preview_proposals';
+const CURRENT_PROPOSAL_KEY = 'artwork_preview_current_proposal';
 
 export interface ProjectExportData {
   project: CuratorProject;
@@ -268,4 +270,60 @@ export function importProject(file: File): Promise<ProjectExportData> {
     reader.onerror = () => reject(new Error('Failed to read file'));
     reader.readAsText(file);
   });
+}
+
+export function saveProposals(proposals: CustomerProposal[]): void {
+  try {
+    localStorage.setItem(PROPOSALS_KEY, JSON.stringify(proposals));
+  } catch (e) {
+    console.error('Failed to save proposals:', e);
+  }
+}
+
+export function loadProposals(): CustomerProposal[] {
+  try {
+    const data = localStorage.getItem(PROPOSALS_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch (e) {
+    console.error('Failed to load proposals:', e);
+    return [];
+  }
+}
+
+export function saveCurrentProposalId(proposalId: string): void {
+  try {
+    localStorage.setItem(CURRENT_PROPOSAL_KEY, proposalId);
+  } catch (e) {
+    console.error('Failed to save current proposal:', e);
+  }
+}
+
+export function loadCurrentProposalId(): string | null {
+  try {
+    return localStorage.getItem(CURRENT_PROPOSAL_KEY);
+  } catch (e) {
+    console.error('Failed to load current proposal:', e);
+    return null;
+  }
+}
+
+export function exportProposal(proposal: CustomerProposal): void {
+  const blob = new Blob([JSON.stringify(proposal, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${proposal.title.replace(/\s+/g, '_')}_${proposal.id}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+export function generateShareLink(proposal: CustomerProposal): string {
+  const baseUrl = window.location.origin + window.location.pathname;
+  const shareData = btoa(JSON.stringify({
+    proposalId: proposal.id,
+    token: proposal.shareToken,
+  }));
+  return `${baseUrl}?share=${shareData}`;
 }
