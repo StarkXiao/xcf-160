@@ -94,13 +94,14 @@ export const ExportPreview: React.FC<ExportPreviewProps> = ({
     setExportConfig((prev) => ({ ...prev, watermark: e.target.value }));
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (!project) return;
     setIsExporting(true);
-    setTimeout(() => {
-      exportProjectPreview(projectId, exportConfig);
+    try {
+      await exportProjectPreview(projectId, exportConfig);
+    } finally {
       setIsExporting(false);
-    }, 500);
+    }
   };
 
   const formatDate = (timestamp: number) => {

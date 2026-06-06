@@ -24,6 +24,7 @@ import {
   DEFAULT_EXPORT_CONFIG,
   DEFAULT_PROGRESS_STEPS,
   EXPORT_FORMAT_LABELS,
+  EXPORT_RESOLUTION_PIXELS,
 } from '../types';
 import type {
   ArtworkGroup,
@@ -1370,53 +1371,61 @@ export const useAppStore = create<AppStore>((set, get) => ({
     return { version1, version2, differences };
   },
 
-  exportProjectPreview: (projectId, config) => {
+  exportProjectPreview: async (projectId, config) => {
     const { curatorProjects, gallerySchemes, artworks } = get();
     const project = curatorProjects.find((p) => p.id === projectId);
     if (!project) return;
 
     const projectSchemes = gallerySchemes.filter((s) => project.schemeIds.includes(s.id));
 
-    const exportData = {
-      project: {
-        name: project.name,
-        description: project.description,
-        status: project.status,
-        tags: project.tags,
-        progress: project.progress.overallProgress,
-      },
-      schemes: projectSchemes.map((scheme) => ({
-        name: scheme.name,
-        description: scheme.description,
-        wallMaterial: scheme.wallMaterial,
-        lightingStrategy: scheme.lightingStrategy,
-        groups: config.includeArtworkInfo ? scheme.groups : undefined,
-        artworks: config.includeArtworkInfo
-          ? scheme.wallArtworks.map((wa) => {
-              const artwork = artworks.find((a) => a.id === wa.artworkId);
-              return {
-                title: artwork?.title,
-                artist: artwork?.artist,
-                year: artwork?.year,
-                medium: artwork?.medium,
-                position: wa.position,
-                lighting: config.includeLightingSpec ? wa.lighting : undefined,
-                material: config.includeLightingSpec ? wa.material : undefined,
-              };
-            })
-          : scheme.wallArtworks.length,
-      })),
-      versions: project.versions.map((v) => ({
-        name: v.name,
-        description: v.description,
-        createdAt: v.createdAt,
-        createdBy: v.createdBy,
-      })),
-      exportTime: Date.now(),
-      resolution: config.resolution,
+    const formatDate = (timestamp: number) => {
+      return new Date(timestamp).toLocaleDateString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      });
     };
 
     if (config.format === 'json') {
+      const exportData = {
+        project: {
+          name: project.name,
+          description: project.description,
+          status: project.status,
+          tags: project.tags,
+          progress: project.progress.overallProgress,
+        },
+        schemes: projectSchemes.map((scheme) => ({
+          name: scheme.name,
+          description: scheme.description,
+          wallMaterial: scheme.wallMaterial,
+          lightingStrategy: scheme.lightingStrategy,
+          groups: config.includeArtworkInfo ? scheme.groups : undefined,
+          artworks: config.includeArtworkInfo
+            ? scheme.wallArtworks.map((wa) => {
+                const artwork = artworks.find((a) => a.id === wa.artworkId);
+                return {
+                  title: artwork?.title,
+                  artist: artwork?.artist,
+                  year: artwork?.year,
+                  medium: artwork?.medium,
+                  position: wa.position,
+                  lighting: config.includeLightingSpec ? wa.lighting : undefined,
+                  material: config.includeLightingSpec ? wa.material : undefined,
+                };
+              })
+            : scheme.wallArtworks.length,
+        })),
+        versions: project.versions.map((v) => ({
+          name: v.name,
+          description: v.description,
+          createdAt: v.createdAt,
+          createdBy: v.createdBy,
+        })),
+        exportTime: Date.now(),
+        resolution: config.resolution,
+      };
+
       const blob = new Blob([JSON.stringify(exportData, null, 2)], {
         type: 'application/json',
       });
@@ -1428,8 +1437,252 @@ export const useAppStore = create<AppStore>((set, get) => ({
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+    } else if (config.format === 'image') {
+      const { width, height } = EXPORT_RESOLUTION_PIXELS[config.resolution];
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      const scale = width / 1920;
+      const padding = 40 * scale;
+
+      const gradient = ctx.createLinearGradient(0, 0, 0, height);
+      gradient.addColorStop(0, '#1a1a2e');
+      gradient.addColorStop(1, '#16213e');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, width, height);
+
+      ctx.fillStyle = 'rgba(212, 175, 55, 0.1)';
+      ctx.fillRect(0, 0, width, 120 * scale);
+
+      ctx.fillStyle = '#d4af37';
+      ctx.font = `bold ${36 * scale}px "Noto Serif SC", serif`;
+      ctx.textAlign = 'left';
+      ctx.fillText(project.name, padding, 70 * scale);
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+      ctx.font = `${18 * scale}px "Inter", sans-serif`;
+      ctx.fillText(
+        `${formatDate(project.createdAt)} · ${project.status === 'completed' ? '已完成' : project.status === 'in_progress' ? '进行中' : project.status === 'draft' ? '草稿' : '已归档'}`,
+        padding,
+        100 * scale
+      );
+
+      if (project.description && config.includeMetadata) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.font = `${16 * scale}px "Inter", sans-serif`;
+        ctx.fillText(project.description, padding, 140 * scale);
+      }
+
+      const statsY = 180 * scale;
+      const statWidth = (width - padding * 2 - 40 * scale * 2) / 3;
+
+      const stats = [
+        { label: '方案', value: projectSchemes.length.toString(), color: '#d4af37' },
+        { label: '作品', value: projectSchemes.reduce((sum, s) => sum + s.wallArtworks.length, 0).toString(), color: '#60a5fa' },
+        { label: '进度', value: `${project.progress.overallProgress}%`, color: '#4ade80' },
+      ];
+
+      stats.forEach((stat, i) => {
+        const x = padding + i * (statWidth + 40 * scale);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+        ctx.beginPath();
+        ctx.roundRect(x, statsY, statWidth, 100 * scale, 12 * scale);
+        ctx.fill();
+
+        ctx.fillStyle = stat.color;
+        ctx.font = `bold ${40 * scale}px "Inter", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText(stat.value, x + statWidth / 2, statsY + 55 * scale);
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.font = `${14 * scale}px "Inter", sans-serif`;
+        ctx.fillText(stat.label, x + statWidth / 2, statsY + 80 * scale);
+      });
+
+      if (config.includeArtworkInfo && projectSchemes.length > 0) {
+        let currentY = 320 * scale;
+        const schemeCardHeight = 200 * scale;
+        const artworkSize = 80 * scale;
+        const artworkGap = 10 * scale;
+
+        for (let sIdx = 0; sIdx < Math.min(projectSchemes.length, 3); sIdx++) {
+          const scheme = projectSchemes[sIdx];
+          const cardX = padding;
+          const cardWidth = width - padding * 2;
+
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
+          ctx.beginPath();
+          ctx.roundRect(cardX, currentY, cardWidth, schemeCardHeight, 16 * scale);
+          ctx.fill();
+
+          ctx.strokeStyle = 'rgba(212, 175, 55, 0.3)';
+          ctx.lineWidth = 2 * scale;
+          ctx.beginPath();
+          ctx.roundRect(cardX, currentY, cardWidth, schemeCardHeight, 16 * scale);
+          ctx.stroke();
+
+          ctx.fillStyle = '#ffffff';
+          ctx.font = `bold ${22 * scale}px "Inter", sans-serif`;
+          ctx.textAlign = 'left';
+          ctx.fillText(scheme.name, cardX + 24 * scale, currentY + 45 * scale);
+
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+          ctx.font = `${14 * scale}px "Inter", sans-serif`;
+          ctx.fillText(`${scheme.wallArtworks.length} 件作品`, cardX + 24 * scale, currentY + 70 * scale);
+
+          if (scheme.groups.length > 0) {
+            let groupX = cardX + 24 * scale;
+            scheme.groups.slice(0, 4).forEach((group) => {
+              ctx.fillStyle = group.color + '40';
+              ctx.beginPath();
+              ctx.roundRect(groupX, currentY + 85 * scale, 100 * scale, 28 * scale, 14 * scale);
+              ctx.fill();
+
+              ctx.fillStyle = group.color;
+              ctx.font = `${12 * scale}px "Inter", sans-serif`;
+              ctx.textAlign = 'center';
+              ctx.fillText(`${group.name} (${group.artworkIds.length})`, groupX + 50 * scale, currentY + 103 * scale);
+              groupX += 110 * scale;
+            });
+          }
+
+          const artworksStartX = cardX + 24 * scale;
+          const artworksStartY = currentY + 125 * scale;
+          const maxArtworks = Math.min(scheme.wallArtworks.length, 8);
+
+          for (let i = 0; i < maxArtworks; i++) {
+            const wa = scheme.wallArtworks[i];
+            const artwork = artworks.find((a) => a.id === wa.artworkId);
+            const ax = artworksStartX + i * (artworkSize + artworkGap);
+            const ay = artworksStartY;
+
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.beginPath();
+            ctx.roundRect(ax, ay, artworkSize, artworkSize, 8 * scale);
+            ctx.fill();
+
+            if (artwork?.imageUrl) {
+              try {
+                const img = new window.Image();
+                img.crossOrigin = 'anonymous';
+                img.src = artwork.imageUrl;
+                if (img.complete && img.naturalWidth > 0) {
+                  ctx.save();
+                  ctx.beginPath();
+                  ctx.roundRect(ax, ay, artworkSize, artworkSize, 8 * scale);
+                  ctx.clip();
+                  ctx.drawImage(img, ax, ay, artworkSize, artworkSize);
+                  ctx.restore();
+                }
+              } catch (e) {
+              }
+            }
+          }
+
+          if (scheme.wallArtworks.length > 8) {
+            const moreX = artworksStartX + 8 * (artworkSize + artworkGap);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.beginPath();
+            ctx.roundRect(moreX, artworksStartY, artworkSize, artworkSize, 8 * scale);
+            ctx.fill();
+
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            ctx.font = `${16 * scale}px "Inter", sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.fillText(`+${scheme.wallArtworks.length - 8}`, moreX + artworkSize / 2, artworksStartY + artworkSize / 2 + 6 * scale);
+          }
+
+          currentY += schemeCardHeight + 20 * scale;
+        }
+      }
+
+      if (config.watermark) {
+        ctx.save();
+        ctx.translate(width / 2, height - 60 * scale);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.font = `${14 * scale}px "Inter", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText(config.watermark, 0, 0);
+        ctx.restore();
+      }
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.font = `${12 * scale}px "Inter", sans-serif`;
+      ctx.textAlign = 'right';
+      ctx.fillText(`Lumina Curator · ${formatDate(Date.now())}`, width - padding, height - padding);
+
+      const loadImages = async () => {
+        const images: HTMLImageElement[] = [];
+        for (const scheme of projectSchemes.slice(0, 3)) {
+          for (const wa of scheme.wallArtworks.slice(0, 8)) {
+            const artwork = artworks.find((a) => a.id === wa.artworkId);
+            if (artwork?.imageUrl) {
+              const img = new window.Image();
+              img.crossOrigin = 'anonymous';
+              img.src = artwork.imageUrl;
+              images.push(img);
+            }
+          }
+        }
+        await Promise.all(images.map(img => new Promise<void>((resolve) => {
+          if (img.complete && img.naturalWidth > 0) {
+            resolve();
+          } else {
+            img.onload = () => resolve();
+            img.onerror = () => resolve();
+          }
+        })));
+        return images;
+      };
+
+      const images = await loadImages();
+
+      let imgIdx = 0;
+      let currentY = 320 * scale;
+      const schemeCardHeight = 200 * scale;
+      const artworkSize = 80 * scale;
+      const artworkGap = 10 * scale;
+
+      for (let sIdx = 0; sIdx < Math.min(projectSchemes.length, 3); sIdx++) {
+        const scheme = projectSchemes[sIdx];
+        const cardX = padding;
+        const artworksStartX = cardX + 24 * scale;
+        const artworksStartY = currentY + 125 * scale;
+        const maxArtworks = Math.min(scheme.wallArtworks.length, 8);
+
+        for (let i = 0; i < maxArtworks && imgIdx < images.length; i++) {
+          const img = images[imgIdx];
+          if (img.complete && img.naturalWidth > 0) {
+            const ax = artworksStartX + i * (artworkSize + artworkGap);
+            const ay = artworksStartY;
+            ctx.save();
+            ctx.beginPath();
+            ctx.roundRect(ax, ay, artworkSize, artworkSize, 8 * scale);
+            ctx.clip();
+            ctx.drawImage(img, ax, ay, artworkSize, artworkSize);
+            ctx.restore();
+          }
+          imgIdx++;
+        }
+        currentY += schemeCardHeight + 20 * scale;
+      }
+
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${project.name.replace(/\s+/g, '_')}_preview.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 'image/png');
     } else {
-      alert(`${EXPORT_FORMAT_LABELS[config.format]} 格式导出功能正在开发中，当前仅支持 JSON 格式`);
+      alert(`${EXPORT_FORMAT_LABELS[config.format]} 格式导出功能正在开发中，当前支持 JSON 和图片格式`);
     }
   },
 }));

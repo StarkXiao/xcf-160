@@ -16,6 +16,13 @@ import {
   FolderOpen,
   Layers,
   TrendingUp,
+  GitCompare,
+  Eye,
+  FileJson,
+  FileImage,
+  Printer,
+  FileText,
+  History,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { SCHEME_PANEL_TABS } from '../../types';
@@ -23,6 +30,8 @@ import type { SchemePanelTab, GalleryScheme } from '../../types';
 import { WallLayout } from './WallLayout';
 import { LightingStrategyPanel } from './LightingStrategyPanel';
 import { SchemeSnapshot } from './SchemeSnapshot';
+import { ArtworkGroupManager } from '../ArtworkGroupManager/ArtworkGroupManager';
+import { ProgressTracker } from '../ProgressTracker/ProgressTracker';
 import { importScheme as importSchemeUtil } from '../../utils/storage';
 
 export const SchemeOrchestrator: React.FC = () => {
@@ -30,7 +39,10 @@ export const SchemeOrchestrator: React.FC = () => {
     gallerySchemes,
     currentSchemeId,
     schemePanelTab,
+    curatorProjects,
+    currentProjectId,
     setCurrentScheme,
+    setCurrentProject,
     setSchemePanelTab,
     createScheme,
     deleteScheme,
@@ -38,6 +50,8 @@ export const SchemeOrchestrator: React.FC = () => {
     exportScheme,
     importScheme,
     updateScheme,
+    setShowCuratorHub,
+    setCuratorHubTab,
   } = useAppStore();
 
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -51,6 +65,13 @@ export const SchemeOrchestrator: React.FC = () => {
     () => gallerySchemes.find((s) => s.id === currentSchemeId),
     [gallerySchemes, currentSchemeId]
   );
+
+  const currentSchemeProject = useMemo(() => {
+    if (!currentSchemeId) return null;
+    return curatorProjects.find((p) => p.schemeIds.includes(currentSchemeId)) || null;
+  }, [curatorProjects, currentSchemeId]);
+
+  const projectIdForProgress = currentProjectId || currentSchemeProject?.id;
 
   const handleCreateScheme = () => {
     if (!newSchemeName.trim()) return;
@@ -136,6 +157,22 @@ export const SchemeOrchestrator: React.FC = () => {
         return <WallLayout />;
       case 'lighting':
         return <LightingStrategyPanel />;
+      case 'groups':
+        return <ArtworkGroupManager schemeId={currentSchemeId!} />;
+      case 'progress':
+        return projectIdForProgress ? (
+          <ProgressTracker projectId={projectIdForProgress} />
+        ) : (
+          <div className="h-full flex items-center justify-center text-white/40">
+            <div className="text-center">
+              <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p className="text-lg mb-2">请先将方案添加到项目中</p>
+              <p className="text-sm text-white/40">
+                进度追踪功能需要关联到具体项目
+              </p>
+            </div>
+          </div>
+        );
       case 'snapshots':
         return <SchemeSnapshot />;
       default:
@@ -156,6 +193,36 @@ export const SchemeOrchestrator: React.FC = () => {
             展厅方案编排
           </h3>
           <div className="flex items-center gap-1">
+            <button
+              onClick={() => {
+                if (projectIdForProgress) {
+                  setCurrentProject(projectIdForProgress);
+                }
+                setCuratorHubTab('versions');
+                setShowCuratorHub(true);
+              }}
+              className="p-2 text-white/60 hover:text-white transition-colors rounded-lg hover:bg-gallery-hover"
+              title="版本历史"
+              disabled={!projectIdForProgress}
+              style={{ opacity: projectIdForProgress ? 1 : 0.4 }}
+            >
+              <History className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => {
+                if (projectIdForProgress) {
+                  setCurrentProject(projectIdForProgress);
+                }
+                setCuratorHubTab('export');
+                setShowCuratorHub(true);
+              }}
+              className="p-2 text-white/60 hover:text-white transition-colors rounded-lg hover:bg-gallery-hover"
+              title="预览输出"
+              disabled={!projectIdForProgress}
+              style={{ opacity: projectIdForProgress ? 1 : 0.4 }}
+            >
+              <Eye className="w-4 h-4" />
+            </button>
             <label className="p-2 text-white/60 hover:text-white transition-colors rounded-lg hover:bg-gallery-hover cursor-pointer">
               <Upload className="w-4 h-4" />
               <input

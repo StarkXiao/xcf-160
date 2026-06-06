@@ -247,6 +247,7 @@ export const SCHEME_PANEL_TABS: { id: SchemePanelTab; label: string }[] = [
   { id: 'layout', label: '挂墙布局' },
   { id: 'lighting', label: '灯光策略' },
   { id: 'groups', label: '作品分组' },
+  { id: 'progress', label: '布展进度' },
   { id: 'snapshots', label: '方案快照' },
 ];
 
@@ -276,6 +277,13 @@ export const EXPORT_RESOLUTION_LABELS: Record<ExportResolution, string> = {
   medium: '标清 (150dpi)',
   high: '高清 (300dpi)',
   print: '印刷级 (600dpi)',
+};
+
+export const EXPORT_RESOLUTION_PIXELS: Record<ExportResolution, { width: number; height: number }> = {
+  low: { width: 1280, height: 720 },
+  medium: { width: 1920, height: 1080 },
+  high: { width: 3840, height: 2160 },
+  print: { width: 7680, height: 4320 },
 };
 
 export const CURATOR_HUB_TABS: { id: CuratorHubTab; label: string }[] = [
