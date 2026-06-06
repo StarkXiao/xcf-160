@@ -18,12 +18,14 @@ import {
   User,
   Image,
   ChevronRight,
+  Store,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { THEME_COLLECTION_CATEGORIES } from '../../types';
 import { LightingTemplatePanel } from '../LightingTemplatePanel/LightingTemplatePanel';
 import { MaterialComboPanel } from '../MaterialComboPanel/MaterialComboPanel';
 import { SceneRecommendationPanel } from '../SceneRecommendationPanel/SceneRecommendationPanel';
+import { PresetMarket } from '../PresetMarket/PresetMarket';
 
 export const ThemeLibrary: React.FC = () => {
   const {
@@ -76,6 +78,7 @@ export const ThemeLibrary: React.FC = () => {
     { id: 'lighting', label: '灯光模板', icon: Lightbulb },
     { id: 'materials', label: '材质组合', icon: Palette },
     { id: 'scenes', label: '场景推荐', icon: Sparkles },
+    { id: 'presetMarket', label: '预设市场', icon: Store },
   ] as const;
 
   const handleCreate = () => {
@@ -203,6 +206,9 @@ export const ThemeLibrary: React.FC = () => {
   }
   if (themeLibraryTab === 'scenes') {
     return <SceneRecommendationPanel />;
+  }
+  if (themeLibraryTab === 'presetMarket') {
+    return <PresetMarket />;
   }
 
   return (

@@ -733,6 +733,11 @@ export interface AppState {
   quotations: ExhibitionQuotation[];
   currentQuotationId: string | null;
   quotationConfig: QuotationConfig;
+  favoriteLightingTemplateIds: string[];
+  favoriteMaterialComboIds: string[];
+  presetMarketTab: PresetMarketTab;
+  presetMarketCategory: PresetMarketCategory;
+  presetMarketSort: PresetSortType;
 }
 
 export const APPROVAL_STATUS_LABELS: Record<ApprovalStatus, string> = {
@@ -790,6 +795,7 @@ export interface LightingTemplate {
   createdAt: number;
   updatedAt: number;
   isPublic: boolean;
+  isOfficial: boolean;
 }
 
 export interface MaterialCombo {
@@ -804,6 +810,7 @@ export interface MaterialCombo {
   createdAt: number;
   updatedAt: number;
   isPublic: boolean;
+  isOfficial: boolean;
 }
 
 export type SceneType = 'solo_exhibition' | 'group_exhibition' | 'thematic_exhibition' | 'retrospective' | 'site_specific' | 'permanent_collection';
@@ -847,7 +854,11 @@ export interface ThemeCollection {
 
 export type ActivePanel = 'lighting' | 'material' | 'compare' | 'storage' | 'scheme' | 'workstation' | 'wallConfig' | 'themeLibrary' | 'lightingTemplates' | 'materialCombos' | 'sceneRecommendations';
 
-export type ThemeLibraryTab = 'collections' | 'lighting' | 'materials' | 'scenes';
+export type ThemeLibraryTab = 'collections' | 'lighting' | 'materials' | 'scenes' | 'presetMarket';
+
+export type PresetMarketTab = 'all' | 'official' | 'favorites';
+export type PresetMarketCategory = 'lighting' | 'material' | 'all';
+export type PresetSortType = 'popular' | 'latest' | 'name';
 
 export const SCENE_TYPE_LABELS: Record<SceneType, string> = {
   solo_exhibition: '个展',
@@ -909,6 +920,25 @@ export const THEME_LIBRARY_TABS: { id: ThemeLibraryTab; label: string; icon: str
   { id: 'lighting', label: '灯光模板', icon: 'Lightbulb' },
   { id: 'materials', label: '材质组合', icon: 'Palette' },
   { id: 'scenes', label: '场景推荐', icon: 'Sparkles' },
+  { id: 'presetMarket', label: '预设市场', icon: 'Store' },
+];
+
+export const PRESET_MARKET_TABS: { id: PresetMarketTab; label: string }[] = [
+  { id: 'all', label: '全部' },
+  { id: 'official', label: '官方模板' },
+  { id: 'favorites', label: '我的收藏' },
+];
+
+export const PRESET_MARKET_CATEGORIES: { id: PresetMarketCategory; label: string }[] = [
+  { id: 'all', label: '全部类型' },
+  { id: 'lighting', label: '灯光模板' },
+  { id: 'material', label: '材质组合' },
+];
+
+export const PRESET_SORT_TYPES: { id: PresetSortType; label: string }[] = [
+  { id: 'popular', label: '热度优先' },
+  { id: 'latest', label: '最新发布' },
+  { id: 'name', label: '名称排序' },
 ];
 
 export const DEFAULT_LIGHTING_TEMPLATES: Omit<LightingTemplate, 'id' | 'createdAt' | 'updatedAt'>[] = [
@@ -921,6 +951,7 @@ export const DEFAULT_LIGHTING_TEMPLATES: Omit<LightingTemplate, 'id' | 'createdA
     artworkIds: [],
     useCount: 0,
     isPublic: true,
+    isOfficial: true,
   },
   {
     name: '水彩柔和照明',
@@ -931,6 +962,7 @@ export const DEFAULT_LIGHTING_TEMPLATES: Omit<LightingTemplate, 'id' | 'createdA
     artworkIds: [],
     useCount: 0,
     isPublic: true,
+    isOfficial: true,
   },
   {
     name: '摄影高保真',
@@ -941,6 +973,7 @@ export const DEFAULT_LIGHTING_TEMPLATES: Omit<LightingTemplate, 'id' | 'createdA
     artworkIds: [],
     useCount: 0,
     isPublic: true,
+    isOfficial: true,
   },
   {
     name: '雕塑立体照明',
@@ -951,6 +984,7 @@ export const DEFAULT_LIGHTING_TEMPLATES: Omit<LightingTemplate, 'id' | 'createdA
     artworkIds: [],
     useCount: 0,
     isPublic: true,
+    isOfficial: true,
   },
   {
     name: '极简冷调照明',
@@ -961,6 +995,7 @@ export const DEFAULT_LIGHTING_TEMPLATES: Omit<LightingTemplate, 'id' | 'createdA
     artworkIds: [],
     useCount: 0,
     isPublic: true,
+    isOfficial: true,
   },
   {
     name: '戏剧性聚光',
@@ -971,6 +1006,7 @@ export const DEFAULT_LIGHTING_TEMPLATES: Omit<LightingTemplate, 'id' | 'createdA
     artworkIds: [],
     useCount: 0,
     isPublic: true,
+    isOfficial: true,
   },
   {
     name: '自然光模拟',
@@ -981,6 +1017,7 @@ export const DEFAULT_LIGHTING_TEMPLATES: Omit<LightingTemplate, 'id' | 'createdA
     artworkIds: [],
     useCount: 0,
     isPublic: true,
+    isOfficial: true,
   },
 ];
 
@@ -994,6 +1031,7 @@ export const DEFAULT_MATERIAL_COMBOS: Omit<MaterialCombo, 'id' | 'createdAt' | '
     artworkIds: [],
     useCount: 0,
     isPublic: true,
+    isOfficial: true,
   },
   {
     name: '现代白框白墙',
@@ -1004,6 +1042,7 @@ export const DEFAULT_MATERIAL_COMBOS: Omit<MaterialCombo, 'id' | 'createdAt' | '
     artworkIds: [],
     useCount: 0,
     isPublic: true,
+    isOfficial: true,
   },
   {
     name: '工业金属水泥墙',
@@ -1014,6 +1053,7 @@ export const DEFAULT_MATERIAL_COMBOS: Omit<MaterialCombo, 'id' | 'createdAt' | '
     artworkIds: [],
     useCount: 0,
     isPublic: true,
+    isOfficial: true,
   },
   {
     name: '温暖木纹配丝光墙',
@@ -1024,6 +1064,7 @@ export const DEFAULT_MATERIAL_COMBOS: Omit<MaterialCombo, 'id' | 'createdAt' | '
     artworkIds: [],
     useCount: 0,
     isPublic: true,
+    isOfficial: true,
   },
   {
     name: '奢华金框高光墙',
@@ -1034,6 +1075,7 @@ export const DEFAULT_MATERIAL_COMBOS: Omit<MaterialCombo, 'id' | 'createdAt' | '
     artworkIds: [],
     useCount: 0,
     isPublic: true,
+    isOfficial: true,
   },
   {
     name: '银色金属冷调',
@@ -1044,6 +1086,7 @@ export const DEFAULT_MATERIAL_COMBOS: Omit<MaterialCombo, 'id' | 'createdAt' | '
     artworkIds: [],
     useCount: 0,
     isPublic: true,
+    isOfficial: true,
   },
   {
     name: '博物馆标准配置',
@@ -1054,6 +1097,7 @@ export const DEFAULT_MATERIAL_COMBOS: Omit<MaterialCombo, 'id' | 'createdAt' | '
     artworkIds: [],
     useCount: 0,
     isPublic: true,
+    isOfficial: true,
   },
 ];
 

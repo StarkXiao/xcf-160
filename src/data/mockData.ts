@@ -409,6 +409,7 @@ export const mockLightingTemplates: LightingTemplate[] = DEFAULT_LIGHTING_TEMPLA
     updatedAt: Date.now() - 86400000 * (15 - index),
     useCount: Math.floor(Math.random() * 50) + 10,
     artworkIds: index === 0 ? ['1', '6'] : index === 2 ? ['7'] : [],
+    isOfficial: true,
   })
 );
 
@@ -420,6 +421,7 @@ export const mockMaterialCombos: MaterialCombo[] = DEFAULT_MATERIAL_COMBOS.map(
     updatedAt: Date.now() - 86400000 * (14 - index),
     useCount: Math.floor(Math.random() * 40) + 8,
     artworkIds: index === 0 ? ['2', '5'] : index === 2 ? ['4'] : [],
+    isOfficial: true,
   })
 );
 

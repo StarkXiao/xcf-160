@@ -37,6 +37,9 @@ import type {
   ThemeLibraryTab,
   SceneType,
   ExhibitionQuotation,
+  PresetMarketTab,
+  PresetMarketCategory,
+  PresetSortType,
   ArtworkCostBreakdown,
   SpaceCostBreakdown,
   QuotationConfig,
@@ -238,7 +241,7 @@ interface AppStore extends AppState {
   getApprovalComments: (approvalId: string) => ApprovalComment[];
   getApprovalHistory: (approvalId: string) => ApprovalHistory[];
   setThemeLibraryTab: (tab: ThemeLibraryTab) => void;
-  createLightingTemplate: (data: Omit<LightingTemplate, 'id' | 'createdAt' | 'updatedAt' | 'useCount'>) => LightingTemplate;
+  createLightingTemplate: (data: Omit<LightingTemplate, 'id' | 'createdAt' | 'updatedAt' | 'useCount' | 'isOfficial'>) => LightingTemplate;
   updateLightingTemplate: (id: string, updates: Partial<LightingTemplate>) => void;
   deleteLightingTemplate: (id: string) => void;
   applyLightingTemplate: (id: string) => void;
@@ -246,7 +249,7 @@ interface AppStore extends AppState {
   saveCurrentLightingAsTemplate: (name: string, description?: string, category?: string) => LightingTemplate;
   selectLightingTemplate: (id: string | null) => void;
   exportLightingTemplate: (id: string) => void;
-  createMaterialCombo: (data: Omit<MaterialCombo, 'id' | 'createdAt' | 'updatedAt' | 'useCount'>) => MaterialCombo;
+  createMaterialCombo: (data: Omit<MaterialCombo, 'id' | 'createdAt' | 'updatedAt' | 'useCount' | 'isOfficial'>) => MaterialCombo;
   updateMaterialCombo: (id: string, updates: Partial<MaterialCombo>) => void;
   deleteMaterialCombo: (id: string) => void;
   applyMaterialCombo: (id: string) => void;
@@ -296,6 +299,20 @@ interface AppStore extends AppState {
   getQuotationsByProjectId: (projectId: string) => ExhibitionQuotation[];
   getQuotationSummary: (quotation: ExhibitionQuotation) => QuotationSummary;
   exportQuotation: (quotationId: string) => void;
+  toggleLightingTemplateFavorite: (templateId: string) => void;
+  toggleMaterialComboFavorite: (comboId: string) => void;
+  duplicateLightingTemplate: (templateId: string, newName?: string) => LightingTemplate;
+  duplicateMaterialCombo: (comboId: string, newName?: string) => MaterialCombo;
+  setPresetMarketTab: (tab: PresetMarketTab) => void;
+  setPresetMarketCategory: (category: PresetMarketCategory) => void;
+  setPresetMarketSort: (sort: PresetSortType) => void;
+  getPresetMarketItems: (
+    tab: PresetMarketTab,
+    category: PresetMarketCategory,
+    sort: PresetSortType,
+    searchQuery?: string,
+    categoryFilter?: string
+  ) => Array<{ type: 'lighting' | 'material'; data: LightingTemplate | MaterialCombo }>;
 }
 
 const getInitialState = (): AppState => {
@@ -370,6 +387,11 @@ const getInitialState = (): AppState => {
     quotations: [],
     currentQuotationId: null,
     quotationConfig: { ...DEFAULT_QUOTATION_CONFIG },
+    favoriteLightingTemplateIds: [],
+    favoriteMaterialComboIds: [],
+    presetMarketTab: 'all',
+    presetMarketCategory: 'all',
+    presetMarketSort: 'popular',
   };
 };
 
@@ -2477,6 +2499,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       createdAt: now,
       updatedAt: now,
       useCount: 0,
+      isOfficial: false,
     };
     set((state) => ({ lightingTemplates: [...state.lightingTemplates, newTemplate] }));
     saveLightingTemplates([...get().lightingTemplates]);
@@ -2547,6 +2570,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       createdAt: now,
       updatedAt: now,
       useCount: 0,
+      isOfficial: false,
     };
     set((state) => ({ materialCombos: [...state.materialCombos, newCombo] }));
     saveMaterialCombos([...get().materialCombos]);
@@ -3320,5 +3344,133 @@ export const useAppStore = create<AppStore>((set, get) => ({
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  },
+
+  toggleLightingTemplateFavorite: (templateId) => {
+    set((state) => {
+      const isFavorite = state.favoriteLightingTemplateIds.includes(templateId);
+      return {
+        favoriteLightingTemplateIds: isFavorite
+          ? state.favoriteLightingTemplateIds.filter((id) => id !== templateId)
+          : [...state.favoriteLightingTemplateIds, templateId],
+      };
+    });
+  },
+
+  toggleMaterialComboFavorite: (comboId) => {
+    set((state) => {
+      const isFavorite = state.favoriteMaterialComboIds.includes(comboId);
+      return {
+        favoriteMaterialComboIds: isFavorite
+          ? state.favoriteMaterialComboIds.filter((id) => id !== comboId)
+          : [...state.favoriteMaterialComboIds, comboId],
+      };
+    });
+  },
+
+  duplicateLightingTemplate: (templateId, newName) => {
+    const { lightingTemplates } = get();
+    const template = lightingTemplates.find((t) => t.id === templateId);
+    if (!template) return {} as LightingTemplate;
+
+    const now = Date.now();
+    const name = newName || `${template.name} (副本)`;
+    const newTemplate: LightingTemplate = {
+      ...template,
+      id: `lighting-tpl-${now}`,
+      name,
+      isOfficial: false,
+      useCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    set((state) => ({
+      lightingTemplates: [...state.lightingTemplates, newTemplate],
+    }));
+    saveLightingTemplates([...get().lightingTemplates]);
+    return newTemplate;
+  },
+
+  duplicateMaterialCombo: (comboId, newName) => {
+    const { materialCombos } = get();
+    const combo = materialCombos.find((c) => c.id === comboId);
+    if (!combo) return {} as MaterialCombo;
+
+    const now = Date.now();
+    const name = newName || `${combo.name} (副本)`;
+    const newCombo: MaterialCombo = {
+      ...combo,
+      id: `material-combo-${now}`,
+      name,
+      isOfficial: false,
+      useCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    set((state) => ({
+      materialCombos: [...state.materialCombos, newCombo],
+    }));
+    saveMaterialCombos([...get().materialCombos]);
+    return newCombo;
+  },
+
+  setPresetMarketTab: (tab) => set({ presetMarketTab: tab }),
+  setPresetMarketCategory: (category) => set({ presetMarketCategory: category }),
+  setPresetMarketSort: (sort) => set({ presetMarketSort: sort }),
+
+  getPresetMarketItems: (tab, category, sort, searchQuery = '', categoryFilter) => {
+    const { lightingTemplates, materialCombos, favoriteLightingTemplateIds, favoriteMaterialComboIds } = get();
+
+    let lightingItems = lightingTemplates.map((t) => ({ type: 'lighting' as const, data: t }));
+    let materialItems = materialCombos.map((c) => ({ type: 'material' as const, data: c }));
+
+    if (tab === 'official') {
+      lightingItems = lightingItems.filter((item) => item.data.isOfficial);
+      materialItems = materialItems.filter((item) => item.data.isOfficial);
+    } else if (tab === 'favorites') {
+      lightingItems = lightingItems.filter((item) => favoriteLightingTemplateIds.includes(item.data.id));
+      materialItems = materialItems.filter((item) => favoriteMaterialComboIds.includes(item.data.id));
+    }
+
+    if (category === 'lighting') {
+      materialItems = [];
+    } else if (category === 'material') {
+      lightingItems = [];
+    }
+
+    if (categoryFilter && categoryFilter !== 'all') {
+      lightingItems = lightingItems.filter((item) => item.data.category === categoryFilter);
+      materialItems = materialItems.filter((item) => item.data.category === categoryFilter);
+    }
+
+    if (searchQuery) {
+      const lowerQuery = searchQuery.toLowerCase();
+      lightingItems = lightingItems.filter(
+        (item) =>
+          item.data.name.toLowerCase().includes(lowerQuery) ||
+          item.data.description?.toLowerCase().includes(lowerQuery) ||
+          item.data.tags.some((t) => t.toLowerCase().includes(lowerQuery))
+      );
+      materialItems = materialItems.filter(
+        (item) =>
+          item.data.name.toLowerCase().includes(lowerQuery) ||
+          item.data.description?.toLowerCase().includes(lowerQuery) ||
+          item.data.tags.some((t) => t.toLowerCase().includes(lowerQuery))
+      );
+    }
+
+    let items = [...lightingItems, ...materialItems];
+
+    if (sort === 'popular') {
+      items.sort((a, b) => b.data.useCount - a.data.useCount);
+    } else if (sort === 'latest') {
+      items.sort((a, b) => b.data.createdAt - a.data.createdAt);
+    } else if (sort === 'name') {
+      items.sort((a, b) => a.data.name.localeCompare(b.data.name, 'zh-CN'));
+    }
+
+    return items;
   },
 }));
