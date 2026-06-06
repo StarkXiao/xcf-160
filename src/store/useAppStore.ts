@@ -44,6 +44,7 @@ import {
   saveCurrentProjectId,
   exportProject as exportProjectUtil,
   importProject as importProjectUtil,
+  type ProjectExportData,
 } from '../utils/storage';
 
 interface AppStore extends AppState {
@@ -61,7 +62,7 @@ interface AppStore extends AppState {
   resetLighting: () => void;
   resetMaterial: () => void;
   initializeFromStorage: () => void;
-  createScheme: (name: string, description?: string) => void;
+  createScheme: (name: string, description?: string) => GalleryScheme;
   deleteScheme: (id: string) => void;
   setCurrentScheme: (id: string | null) => void;
   updateScheme: (id: string, updates: Partial<GalleryScheme>) => void;
@@ -75,9 +76,9 @@ interface AppStore extends AppState {
   selectWallArtwork: (id: string, multiSelect?: boolean) => void;
   clearWallArtworkSelection: () => void;
   setSchemePanelTab: (tab: SchemePanelTab) => void;
-  duplicateScheme: (id: string, newName: string) => void;
+  duplicateScheme: (id: string, newName: string) => GalleryScheme;
   exportScheme: (id: string) => void;
-  importScheme: (scheme: GalleryScheme) => void;
+  importScheme: (scheme: GalleryScheme) => GalleryScheme;
   saveSchemeSnapshot: (schemeId: string, name: string) => void;
   setSchemeWallMaterial: (wallMaterial: AppState['material']['wallMaterial']) => void;
   setAppMode: (mode: AppMode) => void;
@@ -94,7 +95,7 @@ interface AppStore extends AppState {
   loadProjectVersion: (projectId: string, versionId: string) => void;
   deleteProjectVersion: (projectId: string, versionId: string) => void;
   exportProject: (id: string) => void;
-  importProject: (project: CuratorProject) => void;
+  importProject: (data: ProjectExportData) => void;
   openProject: (projectId: string) => void;
 }
 
@@ -259,6 +260,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     }));
     saveGallerySchemes([...get().gallerySchemes, newScheme]);
     saveCurrentSchemeId(newScheme.id);
+    return newScheme;
   },
 
   deleteScheme: (id) => {
@@ -500,7 +502,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   duplicateScheme: (id, newName) => {
     const { gallerySchemes } = get();
     const scheme = gallerySchemes.find((s) => s.id === id);
-    if (!scheme) return;
+    if (!scheme) return undefined as unknown as GalleryScheme;
 
     const newScheme: GalleryScheme = {
       ...scheme,
@@ -522,6 +524,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     }));
     saveGallerySchemes(get().gallerySchemes);
     saveCurrentSchemeId(newScheme.id);
+    return newScheme;
   },
 
   exportScheme: (id) => {
@@ -559,6 +562,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     }));
     saveGallerySchemes(get().gallerySchemes);
     saveCurrentSchemeId(newScheme.id);
+    return newScheme;
   },
 
   saveSchemeSnapshot: (schemeId, name) => {
@@ -905,49 +909,76 @@ export const useAppStore = create<AppStore>((set, get) => ({
     exportProjectUtil(exportData);
   },
 
-  importProject: (project) => {
+  importProject: (data) => {
+    const { project, schemes: importedSchemes } = data;
     const newProjectId = Date.now().toString();
     const schemeIdMap: Record<string, string> = {};
+    const timestamp = Date.now();
 
-    const newSchemes: GalleryScheme[] = project.schemeIds.map((oldSchemeId) => {
-      const scheme = get().gallerySchemes.find((s) => s.id === oldSchemeId);
-      if (!scheme) return null;
+    const newSchemes: GalleryScheme[] = project.schemeIds
+      .map((oldSchemeId) => {
+        const scheme = importedSchemes.find((s) => s.id === oldSchemeId);
+        if (!scheme) return null;
 
-      const newSchemeId = `${newProjectId}-scheme-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      schemeIdMap[oldSchemeId] = newSchemeId;
+        const newSchemeId = `${newProjectId}-scheme-${timestamp}-${Math.random().toString(36).substr(2, 9)}`;
+        schemeIdMap[oldSchemeId] = newSchemeId;
 
-      return {
-        ...scheme,
-        id: newSchemeId,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        wallArtworks: scheme.wallArtworks.map((w) => ({
-          ...w,
-          id: `${newSchemeId}-${w.artworkId}-${Math.random().toString(36).substr(2, 9)}`,
-        })),
-      };
-    }).filter(Boolean) as GalleryScheme[];
+        return {
+          ...scheme,
+          id: newSchemeId,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          wallArtworks: scheme.wallArtworks.map((w) => ({
+            ...w,
+            id: `${newSchemeId}-${w.artworkId}-${Math.random().toString(36).substr(2, 9)}`,
+          })),
+        };
+      })
+      .filter(Boolean) as GalleryScheme[];
+
+    if (importedSchemes.length > 0 && newSchemes.length === 0) {
+      const fallbackSchemes: GalleryScheme[] = importedSchemes.map((scheme) => {
+        const newSchemeId = `${newProjectId}-scheme-${timestamp}-${Math.random().toString(36).substr(2, 9)}`;
+        schemeIdMap[scheme.id] = newSchemeId;
+        return {
+          ...scheme,
+          id: newSchemeId,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          wallArtworks: scheme.wallArtworks.map((w) => ({
+            ...w,
+            id: `${newSchemeId}-${w.artworkId}-${Math.random().toString(36).substr(2, 9)}`,
+          })),
+        };
+      });
+      newSchemes.push(...fallbackSchemes);
+    }
+
+    const remappedSchemeIds = newSchemes.map((s) => s.id);
+    const remappedCurrentSchemeId = project.currentSchemeId
+      ? schemeIdMap[project.currentSchemeId]
+      : newSchemes[0]?.id || null;
 
     const newProject: CuratorProject = {
       ...project,
       id: newProjectId,
-      schemeIds: newSchemes.map((s) => s.id),
-      currentSchemeId: project.currentSchemeId ? schemeIdMap[project.currentSchemeId] : newSchemes[0]?.id || null,
+      schemeIds: remappedSchemeIds,
+      currentSchemeId: remappedCurrentSchemeId,
       versions: project.versions.map((v) => ({
         ...v,
-        id: `version-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        createdAt: Date.now(),
+        id: `version-${timestamp}-${Math.random().toString(36).substr(2, 9)}`,
+        createdAt: timestamp,
         scheme: {
           ...v.scheme,
-          id: `${newProjectId}-version-scheme-${Date.now()}`,
+          id: `${newProjectId}-version-scheme-${timestamp}-${Math.random().toString(36).substr(2, 9)}`,
           wallArtworks: v.scheme.wallArtworks.map((w) => ({
             ...w,
-            id: `${newProjectId}-version-${w.id}`,
+            id: `${newProjectId}-version-${timestamp}-${w.id}`,
           })),
         },
       })),
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      createdAt: timestamp,
+      updatedAt: timestamp,
     };
 
     set((state) => ({

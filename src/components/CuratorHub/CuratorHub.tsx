@@ -137,8 +137,7 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
 
   const handleCreateScheme = () => {
     if (!newSchemeName.trim() || !viewingProjectId) return;
-    createScheme(newSchemeName.trim(), newSchemeDescription.trim() || undefined);
-    const newScheme = [...gallerySchemes].pop();
+    const newScheme = createScheme(newSchemeName.trim(), newSchemeDescription.trim() || undefined);
     if (newScheme) {
       useAppStore.getState().addSchemeToProject(viewingProjectId, newScheme.id);
     }
@@ -153,7 +152,7 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
 
     try {
       const data = await importProjectUtil(file);
-      importProject(data.project);
+      importProject(data);
     } catch (err) {
       alert('导入失败：无效的项目文件');
     }
@@ -166,8 +165,7 @@ export const CuratorHub: React.FC<CuratorHubProps> = ({ onClose }) => {
 
     try {
       const scheme = await importSchemeUtil(file);
-      importScheme(scheme);
-      const newScheme = [...gallerySchemes].pop();
+      const newScheme = importScheme(scheme);
       if (newScheme && viewingProjectId) {
         useAppStore.getState().addSchemeToProject(viewingProjectId, newScheme.id);
       }
