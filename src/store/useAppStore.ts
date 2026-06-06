@@ -30,6 +30,12 @@ import type {
   ApprovalStatus,
   ApprovalComment,
   ApprovalHistory,
+  LightingTemplate,
+  MaterialCombo,
+  SceneRecommendation,
+  ThemeCollection,
+  ThemeLibraryTab,
+  SceneType,
 } from '../types';
 import {
   DEFAULT_LIGHTING,
@@ -47,6 +53,8 @@ import {
   DEFAULT_ARTWORK_TAGS,
   DEFAULT_INGESTION_FORM,
   DEFAULT_EXHIBITION_WALL_CONFIG,
+  DEFAULT_LIGHTING_TEMPLATES,
+  DEFAULT_MATERIAL_COMBOS,
 } from '../types';
 import type {
   ArtworkGroup,
@@ -56,7 +64,7 @@ import type {
   ExportConfig,
   CuratorHubTab,
 } from '../types';
-import { mockArtworks, mockGallerySchemes, mockCuratorProjects } from '../data/mockData';
+import { mockArtworks, mockGallerySchemes, mockCuratorProjects, mockLightingTemplates, mockMaterialCombos, mockSceneRecommendations, mockThemeCollections } from '../data/mockData';
 import {
   loadPresets,
   savePresets,
@@ -89,6 +97,17 @@ import {
   parseShareData,
   loadExhibitionWallConfig,
   saveExhibitionWallConfig,
+  loadLightingTemplates,
+  saveLightingTemplates,
+  loadMaterialCombos,
+  saveMaterialCombos,
+  loadSceneRecommendations,
+  saveSceneRecommendations,
+  loadThemeCollections,
+  saveThemeCollections,
+  exportLightingTemplate as exportLightingTemplateUtil,
+  exportMaterialCombo as exportMaterialComboUtil,
+  exportThemeCollection as exportThemeCollectionUtil,
 } from '../utils/storage';
 
 interface AppStore extends AppState {
@@ -200,6 +219,48 @@ interface AppStore extends AppState {
   getApprovalsByProjectId: (projectId: string) => ApprovalRequest[];
   getApprovalComments: (approvalId: string) => ApprovalComment[];
   getApprovalHistory: (approvalId: string) => ApprovalHistory[];
+  setThemeLibraryTab: (tab: ThemeLibraryTab) => void;
+  createLightingTemplate: (data: Omit<LightingTemplate, 'id' | 'createdAt' | 'updatedAt' | 'useCount'>) => LightingTemplate;
+  updateLightingTemplate: (id: string, updates: Partial<LightingTemplate>) => void;
+  deleteLightingTemplate: (id: string) => void;
+  applyLightingTemplate: (id: string) => void;
+  applyLightingTemplateToSelectedWallArtworks: (templateId: string) => void;
+  saveCurrentLightingAsTemplate: (name: string, description?: string, category?: string) => LightingTemplate;
+  selectLightingTemplate: (id: string | null) => void;
+  exportLightingTemplate: (id: string) => void;
+  createMaterialCombo: (data: Omit<MaterialCombo, 'id' | 'createdAt' | 'updatedAt' | 'useCount'>) => MaterialCombo;
+  updateMaterialCombo: (id: string, updates: Partial<MaterialCombo>) => void;
+  deleteMaterialCombo: (id: string) => void;
+  applyMaterialCombo: (id: string) => void;
+  applyMaterialComboToSelectedWallArtworks: (comboId: string) => void;
+  saveCurrentMaterialAsCombo: (name: string, description?: string, category?: string) => MaterialCombo;
+  selectMaterialCombo: (id: string | null) => void;
+  exportMaterialCombo: (id: string) => void;
+  createSceneRecommendation: (data: Omit<SceneRecommendation, 'id' | 'createdAt'>) => SceneRecommendation;
+  updateSceneRecommendation: (id: string, updates: Partial<SceneRecommendation>) => void;
+  deleteSceneRecommendation: (id: string) => void;
+  applySceneRecommendation: (id: string) => void;
+  selectSceneRecommendation: (id: string | null) => void;
+  generateSceneRecommendations: (artworkIds: string[]) => SceneRecommendation[];
+  getSceneRecommendationsByArtwork: (artworkId: string) => SceneRecommendation[];
+  toggleArtworkSelection: (artworkId: string, multiSelect?: boolean) => void;
+  clearArtworkSelection: () => void;
+  createThemeCollection: (data: Omit<ThemeCollection, 'id' | 'createdAt' | 'updatedAt' | 'viewCount' | 'useCount'>) => ThemeCollection;
+  updateThemeCollection: (id: string, updates: Partial<ThemeCollection>) => void;
+  deleteThemeCollection: (id: string) => void;
+  applyThemeCollection: (id: string) => void;
+  addArtworksToThemeCollection: (collectionId: string, artworkIds: string[]) => void;
+  removeArtworksFromThemeCollection: (collectionId: string, artworkIds: string[]) => void;
+  addLightingTemplateToThemeCollection: (collectionId: string, templateId: string) => void;
+  addMaterialComboToThemeCollection: (collectionId: string, comboId: string) => void;
+  addSceneRecommendationToThemeCollection: (collectionId: string, sceneId: string) => void;
+  selectThemeCollection: (id: string | null) => void;
+  exportThemeCollection: (id: string) => void;
+  getFilteredLightingTemplates: (category?: string, query?: string) => LightingTemplate[];
+  getFilteredMaterialCombos: (category?: string, query?: string) => MaterialCombo[];
+  getFilteredThemeCollections: (category?: string, query?: string) => ThemeCollection[];
+  getLightingTemplatesByArtwork: (artworkId: string) => LightingTemplate[];
+  getMaterialCombosByArtwork: (artworkId: string) => MaterialCombo[];
 }
 
 const getInitialState = (): AppState => {
@@ -215,21 +276,30 @@ const getInitialState = (): AppState => {
   const savedProposals = loadProposals();
   const savedCurrentProposalId = loadCurrentProposalId();
   const savedWallConfig = loadExhibitionWallConfig();
+  const savedLightingTemplates = loadLightingTemplates();
+  const savedMaterialCombos = loadMaterialCombos();
+  const savedSceneRecommendations = loadSceneRecommendations();
+  const savedThemeCollections = loadThemeCollections();
 
   const schemes = savedSchemes.length > 0 ? savedSchemes : mockGallerySchemes;
   const projects = savedProjects.length > 0 ? savedProjects : mockCuratorProjects;
   const currentProjectId = savedCurrentProjectId || projects[0]?.id || null;
   const currentSchemeId = savedCurrentSchemeId || schemes[0]?.id || null;
   const appMode = (savedAppMode as AppMode) || 'curator';
+  const lightingTemplates = savedLightingTemplates.length > 0 ? savedLightingTemplates : mockLightingTemplates;
+  const materialCombos = savedMaterialCombos.length > 0 ? savedMaterialCombos : mockMaterialCombos;
+  const sceneRecommendations = savedSceneRecommendations.length > 0 ? savedSceneRecommendations : mockSceneRecommendations;
+  const themeCollections = savedThemeCollections.length > 0 ? savedThemeCollections : mockThemeCollections;
 
   return {
     artworks: mockArtworks,
     selectedArtworkId: savedArtworkId || mockArtworks[0]?.id || null,
+    selectedArtworkIds: new Set<string>(),
     lighting: savedLighting || DEFAULT_LIGHTING,
     material: savedMaterial || DEFAULT_MATERIAL,
     presets: savedPresets,
     compareList: [],
-    activePanel: 'scheme',
+    activePanel: 'themeLibrary',
     gallerySchemes: schemes,
     currentSchemeId,
     selectedWallArtworkIds: [],
@@ -253,6 +323,15 @@ const getInitialState = (): AppState => {
     approvalComments: [],
     approvalHistories: [],
     currentApprovalId: null,
+    lightingTemplates,
+    materialCombos,
+    sceneRecommendations,
+    themeCollections,
+    themeLibraryTab: 'collections',
+    selectedLightingTemplateId: null,
+    selectedMaterialComboId: null,
+    selectedSceneRecommendationId: null,
+    selectedThemeCollectionId: null,
   };
 };
 
@@ -2348,5 +2427,466 @@ export const useAppStore = create<AppStore>((set, get) => ({
   getApprovalHistory: (approvalId) => {
     const { approvalHistories } = get();
     return approvalHistories.filter((h) => h.approvalId === approvalId);
+  },
+
+  setThemeLibraryTab: (tab) => set({ themeLibraryTab: tab }),
+
+  createLightingTemplate: (data) => {
+    const now = Date.now();
+    const newTemplate: LightingTemplate = {
+      ...data,
+      id: `lighting-tpl-${now}`,
+      createdAt: now,
+      updatedAt: now,
+      useCount: 0,
+    };
+    set((state) => ({ lightingTemplates: [...state.lightingTemplates, newTemplate] }));
+    saveLightingTemplates([...get().lightingTemplates]);
+    return newTemplate;
+  },
+
+  updateLightingTemplate: (id, updates) => {
+    set((state) => ({
+      lightingTemplates: state.lightingTemplates.map((t) =>
+        t.id === id ? { ...t, ...updates, updatedAt: Date.now() } : t
+      ),
+    }));
+    saveLightingTemplates(get().lightingTemplates);
+  },
+
+  deleteLightingTemplate: (id) => {
+    set((state) => ({
+      lightingTemplates: state.lightingTemplates.filter((t) => t.id !== id),
+      selectedLightingTemplateId: state.selectedLightingTemplateId === id ? null : state.selectedLightingTemplateId,
+    }));
+    saveLightingTemplates(get().lightingTemplates);
+  },
+
+  applyLightingTemplate: (id) => {
+    const { lightingTemplates, setLighting, updateLightingTemplate } = get();
+    const template = lightingTemplates.find((t) => t.id === id);
+    if (!template) return;
+    setLighting(template.lighting);
+    updateLightingTemplate(id, { useCount: template.useCount + 1 });
+  },
+
+  applyLightingTemplateToSelectedWallArtworks: (templateId) => {
+    const { lightingTemplates, selectedWallArtworkIds, updateWallArtworkLighting, updateLightingTemplate } = get();
+    const template = lightingTemplates.find((t) => t.id === templateId);
+    if (!template || selectedWallArtworkIds.length === 0) return;
+    selectedWallArtworkIds.forEach((wallArtworkId) => {
+      updateWallArtworkLighting(wallArtworkId, template.lighting);
+    });
+    updateLightingTemplate(templateId, { useCount: template.useCount + 1 });
+  },
+
+  saveCurrentLightingAsTemplate: (name, description = '', category = 'contemporary') => {
+    const { lighting, selectedArtworkId, createLightingTemplate } = get();
+    return createLightingTemplate({
+      name,
+      description,
+      category,
+      tags: [],
+      lighting: { ...lighting },
+      artworkIds: selectedArtworkId ? [selectedArtworkId] : [],
+      isPublic: true,
+    });
+  },
+
+  selectLightingTemplate: (id) => set({ selectedLightingTemplateId: id }),
+
+  exportLightingTemplate: (id) => {
+    const { lightingTemplates } = get();
+    const template = lightingTemplates.find((t) => t.id === id);
+    if (template) exportLightingTemplateUtil(template);
+  },
+
+  createMaterialCombo: (data) => {
+    const now = Date.now();
+    const newCombo: MaterialCombo = {
+      ...data,
+      id: `material-combo-${now}`,
+      createdAt: now,
+      updatedAt: now,
+      useCount: 0,
+    };
+    set((state) => ({ materialCombos: [...state.materialCombos, newCombo] }));
+    saveMaterialCombos([...get().materialCombos]);
+    return newCombo;
+  },
+
+  updateMaterialCombo: (id, updates) => {
+    set((state) => ({
+      materialCombos: state.materialCombos.map((c) =>
+        c.id === id ? { ...c, ...updates, updatedAt: Date.now() } : c
+      ),
+    }));
+    saveMaterialCombos(get().materialCombos);
+  },
+
+  deleteMaterialCombo: (id) => {
+    set((state) => ({
+      materialCombos: state.materialCombos.filter((c) => c.id !== id),
+      selectedMaterialComboId: state.selectedMaterialComboId === id ? null : state.selectedMaterialComboId,
+    }));
+    saveMaterialCombos(get().materialCombos);
+  },
+
+  applyMaterialCombo: (id) => {
+    const { materialCombos, setMaterial, updateMaterialCombo } = get();
+    const combo = materialCombos.find((c) => c.id === id);
+    if (!combo) return;
+    setMaterial(combo.material);
+    updateMaterialCombo(id, { useCount: combo.useCount + 1 });
+  },
+
+  applyMaterialComboToSelectedWallArtworks: (comboId) => {
+    const { materialCombos, selectedWallArtworkIds, updateWallArtworkMaterial, updateMaterialCombo } = get();
+    const combo = materialCombos.find((c) => c.id === comboId);
+    if (!combo || selectedWallArtworkIds.length === 0) return;
+    selectedWallArtworkIds.forEach((wallArtworkId) => {
+      updateWallArtworkMaterial(wallArtworkId, combo.material);
+    });
+    updateMaterialCombo(comboId, { useCount: combo.useCount + 1 });
+  },
+
+  saveCurrentMaterialAsCombo: (name, description = '', category = 'modern_museum') => {
+    const { material, selectedArtworkId, createMaterialCombo } = get();
+    return createMaterialCombo({
+      name,
+      description,
+      category,
+      tags: [],
+      material: { ...material },
+      artworkIds: selectedArtworkId ? [selectedArtworkId] : [],
+      isPublic: true,
+    });
+  },
+
+  selectMaterialCombo: (id) => set({ selectedMaterialComboId: id }),
+
+  exportMaterialCombo: (id) => {
+    const { materialCombos } = get();
+    const combo = materialCombos.find((c) => c.id === id);
+    if (combo) exportMaterialComboUtil(combo);
+  },
+
+  createSceneRecommendation: (data) => {
+    const now = Date.now();
+    const newScene: SceneRecommendation = {
+      ...data,
+      id: `scene-${now}`,
+      createdAt: now,
+    };
+    set((state) => ({ sceneRecommendations: [...state.sceneRecommendations, newScene] }));
+    saveSceneRecommendations([...get().sceneRecommendations]);
+    return newScene;
+  },
+
+  updateSceneRecommendation: (id, updates) => {
+    set((state) => ({
+      sceneRecommendations: state.sceneRecommendations.map((s) =>
+        s.id === id ? { ...s, ...updates } : s
+      ),
+    }));
+    saveSceneRecommendations(get().sceneRecommendations);
+  },
+
+  deleteSceneRecommendation: (id) => {
+    set((state) => ({
+      sceneRecommendations: state.sceneRecommendations.filter((s) => s.id !== id),
+      selectedSceneRecommendationId: state.selectedSceneRecommendationId === id ? null : state.selectedSceneRecommendationId,
+    }));
+    saveSceneRecommendations(get().sceneRecommendations);
+  },
+
+  applySceneRecommendation: (id) => {
+    const { sceneRecommendations, lightingTemplates, materialCombos, applyLightingTemplate, applyMaterialCombo } = get();
+    const scene = sceneRecommendations.find((s) => s.id === id);
+    if (!scene) return;
+    if (scene.suggestedLightingTemplateId) {
+      applyLightingTemplate(scene.suggestedLightingTemplateId);
+    }
+    if (scene.suggestedMaterialComboId) {
+      applyMaterialCombo(scene.suggestedMaterialComboId);
+    }
+    if (scene.artworkIds.length > 0) {
+      get().addArtworksToScheme(scene.artworkIds);
+    }
+  },
+
+  selectSceneRecommendation: (id) => set({ selectedSceneRecommendationId: id }),
+
+  generateSceneRecommendations: (artworkIds) => {
+    const { artworks, lightingTemplates, materialCombos, createSceneRecommendation } = get();
+    const selectedArtworks = artworks.filter((a) => artworkIds.includes(a.id));
+    if (selectedArtworks.length === 0) return [];
+
+    const recommendations: SceneRecommendation[] = [];
+
+    const themedScene = createSceneRecommendation({
+      name: '主题展览方案',
+      description: '基于选中作品的艺术风格，推荐统一的主题展览配置',
+      sceneType: 'thematic_exhibition',
+      artworkIds,
+      suggestedLightingTemplateId: lightingTemplates[0]?.id,
+      suggestedMaterialComboId: materialCombos[0]?.id,
+      layoutHint: '建议采用对称式布局，按作品创作年代排序，突出主题叙事性',
+      curatorNote: '此方案强调作品之间的主题关联，建议配合详细的导览文字说明',
+      tags: ['主题展', '推荐'],
+      matchScore: 0.85,
+    });
+    recommendations.push(themedScene);
+
+    if (selectedArtworks.length >= 3) {
+      const groupScene = createSceneRecommendation({
+        name: '群展陈列方案',
+        description: '多作品群展模式，均衡展示每件作品的特色',
+        sceneType: 'group_exhibition',
+        artworkIds,
+        suggestedLightingTemplateId: lightingTemplates.find((t) => t.category === 'natural')?.id,
+        suggestedMaterialComboId: materialCombos.find((c) => c.category === 'white_cube')?.id,
+        layoutHint: '建议采用网格布局或流动式路线，每件作品保持适当间距',
+        curatorNote: '群展模式注重作品间的对话关系，灯光和材质保持统一风格以避免视觉混乱',
+        tags: ['群展', '多作品'],
+        matchScore: 0.78,
+      });
+      recommendations.push(groupScene);
+    }
+
+    if (selectedArtworks.length === 1) {
+      const soloScene = createSceneRecommendation({
+        name: '个展聚焦方案',
+        description: '单作品个展模式，全方位突出作品的艺术价值',
+        sceneType: 'solo_exhibition',
+        artworkIds,
+        suggestedLightingTemplateId: lightingTemplates.find((t) => t.category === 'dramatic')?.id,
+        suggestedMaterialComboId: materialCombos.find((c) => c.category === 'luxury')?.id,
+        layoutHint: '建议将作品置于视觉中心，周围留出充足的留白空间',
+        curatorNote: '个展模式通过聚焦单一作品，营造沉浸式的观赏体验，建议搭配艺术家访谈视频',
+        tags: ['个展', '聚焦'],
+        matchScore: 0.92,
+      });
+      recommendations.push(soloScene);
+    }
+
+    const permanentScene = createSceneRecommendation({
+      name: '常设展览方案',
+      description: '适合长期陈列的稳健配置，平衡展示效果与作品保护',
+      sceneType: 'permanent_collection',
+      artworkIds,
+      suggestedLightingTemplateId: lightingTemplates.find((t) => t.category === 'photography')?.id,
+      suggestedMaterialComboId: materialCombos.find((c) => c.category === 'modern_museum')?.id,
+      layoutHint: '建议采用经典博物馆布局，考虑人流导向和观赏舒适度',
+      curatorNote: '常设展览需考虑长期展示的光线控制，建议配置紫外线过滤和光照时间控制',
+      tags: ['常设', '长期'],
+      matchScore: 0.7,
+    });
+    recommendations.push(permanentScene);
+
+    return recommendations;
+  },
+
+  getSceneRecommendationsByArtwork: (artworkId) => {
+    const { sceneRecommendations } = get();
+    return sceneRecommendations.filter((s) => s.artworkIds.includes(artworkId));
+  },
+
+  toggleArtworkSelection: (artworkId, multiSelect = false) => {
+    set((state) => {
+      const newSelected = new Set(state.selectedArtworkIds);
+      if (multiSelect) {
+        if (newSelected.has(artworkId)) {
+          newSelected.delete(artworkId);
+        } else {
+          newSelected.add(artworkId);
+        }
+      } else {
+        newSelected.clear();
+        newSelected.add(artworkId);
+      }
+      return { selectedArtworkIds: newSelected };
+    });
+  },
+
+  clearArtworkSelection: () => {
+    set({ selectedArtworkIds: new Set() });
+  },
+
+  createThemeCollection: (data) => {
+    const now = Date.now();
+    const newCollection: ThemeCollection = {
+      ...data,
+      id: `theme-${now}`,
+      createdAt: now,
+      updatedAt: now,
+      viewCount: 0,
+      useCount: 0,
+    };
+    set((state) => ({ themeCollections: [...state.themeCollections, newCollection] }));
+    saveThemeCollections([...get().themeCollections]);
+    return newCollection;
+  },
+
+  updateThemeCollection: (id, updates) => {
+    set((state) => ({
+      themeCollections: state.themeCollections.map((c) =>
+        c.id === id ? { ...c, ...updates, updatedAt: Date.now() } : c
+      ),
+    }));
+    saveThemeCollections(get().themeCollections);
+  },
+
+  deleteThemeCollection: (id) => {
+    set((state) => ({
+      themeCollections: state.themeCollections.filter((c) => c.id !== id),
+      selectedThemeCollectionId: state.selectedThemeCollectionId === id ? null : state.selectedThemeCollectionId,
+    }));
+    saveThemeCollections(get().themeCollections);
+  },
+
+  applyThemeCollection: (id) => {
+    const { themeCollections, lightingTemplates, materialCombos, updateThemeCollection } = get();
+    const collection = themeCollections.find((c) => c.id === id);
+    if (!collection) return;
+
+    if (collection.artworkIds.length > 0) {
+      get().addArtworksToScheme(collection.artworkIds);
+    }
+
+    updateThemeCollection(id, { useCount: collection.useCount + 1 });
+  },
+
+  addArtworksToThemeCollection: (collectionId, artworkIds) => {
+    set((state) => ({
+      themeCollections: state.themeCollections.map((c) =>
+        c.id === collectionId
+          ? { ...c, artworkIds: [...new Set([...c.artworkIds, ...artworkIds])], updatedAt: Date.now() }
+          : c
+      ),
+    }));
+    saveThemeCollections(get().themeCollections);
+  },
+
+  removeArtworksFromThemeCollection: (collectionId, artworkIds) => {
+    set((state) => ({
+      themeCollections: state.themeCollections.map((c) =>
+        c.id === collectionId
+          ? { ...c, artworkIds: c.artworkIds.filter((id) => !artworkIds.includes(id)), updatedAt: Date.now() }
+          : c
+      ),
+    }));
+    saveThemeCollections(get().themeCollections);
+  },
+
+  addLightingTemplateToThemeCollection: (collectionId, templateId) => {
+    set((state) => ({
+      themeCollections: state.themeCollections.map((c) =>
+        c.id === collectionId
+          ? { ...c, lightingTemplateIds: [...new Set([...c.lightingTemplateIds, templateId])], updatedAt: Date.now() }
+          : c
+      ),
+    }));
+    saveThemeCollections(get().themeCollections);
+  },
+
+  addMaterialComboToThemeCollection: (collectionId, comboId) => {
+    set((state) => ({
+      themeCollections: state.themeCollections.map((c) =>
+        c.id === collectionId
+          ? { ...c, materialComboIds: [...new Set([...c.materialComboIds, comboId])], updatedAt: Date.now() }
+          : c
+      ),
+    }));
+    saveThemeCollections(get().themeCollections);
+  },
+
+  addSceneRecommendationToThemeCollection: (collectionId, sceneId) => {
+    set((state) => ({
+      themeCollections: state.themeCollections.map((c) =>
+        c.id === collectionId
+          ? { ...c, sceneRecommendationIds: [...new Set([...c.sceneRecommendationIds, sceneId])], updatedAt: Date.now() }
+          : c
+      ),
+    }));
+    saveThemeCollections(get().themeCollections);
+  },
+
+  selectThemeCollection: (id) => {
+    set((state) => {
+      const collection = state.themeCollections.find((c) => c.id === id);
+      if (collection) {
+        get().updateThemeCollection(id, { viewCount: collection.viewCount + 1 });
+      }
+      return { selectedThemeCollectionId: id };
+    });
+  },
+
+  exportThemeCollection: (id) => {
+    const { themeCollections } = get();
+    const collection = themeCollections.find((c) => c.id === id);
+    if (collection) exportThemeCollectionUtil(collection);
+  },
+
+  getFilteredLightingTemplates: (category, query) => {
+    const { lightingTemplates } = get();
+    let result = [...lightingTemplates];
+    if (category) {
+      result = result.filter((t) => t.category === category);
+    }
+    if (query) {
+      const lowerQuery = query.toLowerCase();
+      result = result.filter((t) =>
+        t.name.toLowerCase().includes(lowerQuery) ||
+        (t.description && t.description.toLowerCase().includes(lowerQuery)) ||
+        t.tags.some((tag) => tag.toLowerCase().includes(lowerQuery))
+      );
+    }
+    return result;
+  },
+
+  getFilteredMaterialCombos: (category, query) => {
+    const { materialCombos } = get();
+    let result = [...materialCombos];
+    if (category) {
+      result = result.filter((c) => c.category === category);
+    }
+    if (query) {
+      const lowerQuery = query.toLowerCase();
+      result = result.filter((c) =>
+        c.name.toLowerCase().includes(lowerQuery) ||
+        (c.description && c.description.toLowerCase().includes(lowerQuery)) ||
+        c.tags.some((tag) => tag.toLowerCase().includes(lowerQuery))
+      );
+    }
+    return result;
+  },
+
+  getFilteredThemeCollections: (category, query) => {
+    const { themeCollections } = get();
+    let result = [...themeCollections];
+    if (category) {
+      result = result.filter((c) => c.category === category);
+    }
+    if (query) {
+      const lowerQuery = query.toLowerCase();
+      result = result.filter((c) =>
+        c.name.toLowerCase().includes(lowerQuery) ||
+        c.description.toLowerCase().includes(lowerQuery) ||
+        c.tags.some((tag) => tag.toLowerCase().includes(lowerQuery)) ||
+        (c.subtitle && c.subtitle.toLowerCase().includes(lowerQuery))
+      );
+    }
+    return result;
+  },
+
+  getLightingTemplatesByArtwork: (artworkId) => {
+    const { lightingTemplates } = get();
+    return lightingTemplates.filter((t) => t.artworkIds.includes(artworkId));
+  },
+
+  getMaterialCombosByArtwork: (artworkId) => {
+    const { materialCombos } = get();
+    return materialCombos.filter((c) => c.artworkIds.includes(artworkId));
   },
 }));

@@ -692,11 +692,12 @@ export type CuratorHubTab = 'overview' | 'groups' | 'progress' | 'versions' | 'e
 export interface AppState {
   artworks: Artwork[];
   selectedArtworkId: string | null;
+  selectedArtworkIds: Set<string>;
   lighting: LightingConfig;
   material: MaterialConfig;
   presets: Preset[];
   compareList: string[];
-  activePanel: 'lighting' | 'material' | 'compare' | 'storage' | 'scheme' | 'workstation' | 'wallConfig';
+  activePanel: ActivePanel;
   gallerySchemes: GalleryScheme[];
   currentSchemeId: string | null;
   selectedWallArtworkIds: string[];
@@ -720,6 +721,15 @@ export interface AppState {
   approvalComments: ApprovalComment[];
   approvalHistories: ApprovalHistory[];
   currentApprovalId: string | null;
+  lightingTemplates: LightingTemplate[];
+  materialCombos: MaterialCombo[];
+  sceneRecommendations: SceneRecommendation[];
+  themeCollections: ThemeCollection[];
+  themeLibraryTab: ThemeLibraryTab;
+  selectedLightingTemplateId: string | null;
+  selectedMaterialComboId: string | null;
+  selectedSceneRecommendationId: string | null;
+  selectedThemeCollectionId: string | null;
 }
 
 export const APPROVAL_STATUS_LABELS: Record<ApprovalStatus, string> = {
@@ -762,4 +772,283 @@ export const CURATOR_HUB_TABS: { id: CuratorHubTab; label: string }[] = [
   { id: 'export', label: '预览输出' },
   { id: 'proposal', label: '客户提案' },
   { id: 'approval', label: '审批流程' },
+];
+
+export interface LightingTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  category: string;
+  tags: string[];
+  lighting: LightingConfig;
+  artworkIds: string[];
+  useCount: number;
+  createdAt: number;
+  updatedAt: number;
+  isPublic: boolean;
+}
+
+export interface MaterialCombo {
+  id: string;
+  name: string;
+  description?: string;
+  category: string;
+  tags: string[];
+  material: MaterialConfig;
+  artworkIds: string[];
+  useCount: number;
+  createdAt: number;
+  updatedAt: number;
+  isPublic: boolean;
+}
+
+export type SceneType = 'solo_exhibition' | 'group_exhibition' | 'thematic_exhibition' | 'retrospective' | 'site_specific' | 'permanent_collection';
+
+export interface SceneRecommendation {
+  id: string;
+  name: string;
+  description: string;
+  sceneType: SceneType;
+  artworkIds: string[];
+  suggestedLightingTemplateId?: string;
+  suggestedMaterialComboId?: string;
+  layoutHint: string;
+  curatorNote: string;
+  tags: string[];
+  matchScore?: number;
+  createdAt: number;
+}
+
+export interface ThemeCollection {
+  id: string;
+  name: string;
+  subtitle?: string;
+  description: string;
+  coverArtworkId?: string;
+  themeColor: string;
+  artworkIds: string[];
+  lightingTemplateIds: string[];
+  materialComboIds: string[];
+  sceneRecommendationIds: string[];
+  projectIds: string[];
+  category: string;
+  tags: string[];
+  curator: string;
+  viewCount: number;
+  useCount: number;
+  isPublic: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type ActivePanel = 'lighting' | 'material' | 'compare' | 'storage' | 'scheme' | 'workstation' | 'wallConfig' | 'themeLibrary' | 'lightingTemplates' | 'materialCombos' | 'sceneRecommendations';
+
+export type ThemeLibraryTab = 'collections' | 'lighting' | 'materials' | 'scenes';
+
+export const SCENE_TYPE_LABELS: Record<SceneType, string> = {
+  solo_exhibition: '个展',
+  group_exhibition: '群展',
+  thematic_exhibition: '主题展',
+  retrospective: '回顾展',
+  site_specific: '在地艺术',
+  permanent_collection: '常设展览',
+};
+
+export const LIGHTING_TEMPLATE_CATEGORIES: { id: string; label: string }[] = [
+  { id: 'classical', label: '古典主义' },
+  { id: 'modern', label: '现代主义' },
+  { id: 'contemporary', label: '当代艺术' },
+  { id: 'photography', label: '摄影作品' },
+  { id: 'sculpture', label: '雕塑装置' },
+  { id: 'watercolor', label: '水彩作品' },
+  { id: 'oil', label: '油画作品' },
+  { id: 'minimalist', label: '极简风格' },
+  { id: 'dramatic', label: '戏剧效果' },
+  { id: 'natural', label: '自然光感' },
+];
+
+export const MATERIAL_COMBO_CATEGORIES: { id: string; label: string }[] = [
+  { id: 'classic_gallery', label: '经典画廊' },
+  { id: 'modern_museum', label: '现代博物馆' },
+  { id: 'white_cube', label: '白盒子空间' },
+  { id: 'industrial', label: '工业风格' },
+  { id: 'luxury', label: '奢华典藏' },
+  { id: 'minimal', label: '极简主义' },
+  { id: 'warm_wood', label: '温暖木质' },
+  { id: 'cool_metal', label: '冷调金属' },
+];
+
+export const SCENE_RECOMMENDATION_CATEGORIES: { id: string; label: string }[] = [
+  { id: 'solo_exhibition', label: '个展' },
+  { id: 'group_exhibition', label: '群展' },
+  { id: 'thematic_exhibition', label: '主题展' },
+  { id: 'retrospective', label: '回顾展' },
+  { id: 'permanent', label: '常设展' },
+];
+
+export const THEME_COLLECTION_CATEGORIES: { id: string; label: string }[] = [
+  { id: 'impressionism', label: '印象派' },
+  { id: 'modern_art', label: '现代艺术' },
+  { id: 'contemporary', label: '当代艺术' },
+  { id: 'chinese_ink', label: '中国水墨' },
+  { id: 'photography', label: '摄影艺术' },
+  { id: 'sculpture', label: '雕塑装置' },
+  { id: 'portrait', label: '肖像艺术' },
+  { id: 'landscape', label: '风景艺术' },
+  { id: 'abstract', label: '抽象艺术' },
+  { id: 'fine_art', label: '美术典藏' },
+  { id: 'new_media', label: '新媒体艺术' },
+];
+
+export const THEME_LIBRARY_TABS: { id: ThemeLibraryTab; label: string; icon: string }[] = [
+  { id: 'collections', label: '馆藏主题', icon: 'Layers' },
+  { id: 'lighting', label: '灯光模板', icon: 'Lightbulb' },
+  { id: 'materials', label: '材质组合', icon: 'Palette' },
+  { id: 'scenes', label: '场景推荐', icon: 'Sparkles' },
+];
+
+export const DEFAULT_LIGHTING_TEMPLATES: Omit<LightingTemplate, 'id' | 'createdAt' | 'updatedAt'>[] = [
+  {
+    name: '经典油画照明',
+    description: '温暖聚光，突出油画厚重质感和笔触层次',
+    category: 'oil',
+    tags: ['油画', '经典', '温暖'],
+    lighting: { type: 'spotlight', colorTemperature: 3200, intensity: 0.85, angle: 35, positionX: 0, positionY: 2.5, positionZ: 2.5 },
+    artworkIds: [],
+    useCount: 0,
+    isPublic: true,
+  },
+  {
+    name: '水彩柔和照明',
+    description: '柔和泛光，展现水彩通透感和色彩层次',
+    category: 'watercolor',
+    tags: ['水彩', '柔和', '通透'],
+    lighting: { type: 'floodlight', colorTemperature: 4500, intensity: 0.65, angle: 60, positionX: 0, positionY: 2, positionZ: 3 },
+    artworkIds: [],
+    useCount: 0,
+    isPublic: true,
+  },
+  {
+    name: '摄影高保真',
+    description: '中性白光，准确还原摄影作品色彩细节',
+    category: 'photography',
+    tags: ['摄影', '保真', '中性'],
+    lighting: { type: 'spotlight', colorTemperature: 5000, intensity: 0.75, angle: 40, positionX: 0, positionY: 2.2, positionZ: 2.8 },
+    artworkIds: [],
+    useCount: 0,
+    isPublic: true,
+  },
+  {
+    name: '雕塑立体照明',
+    description: '多维度光影，突出雕塑立体感和材质表现',
+    category: 'sculpture',
+    tags: ['雕塑', '立体', '多光源'],
+    lighting: { type: 'floodlight', colorTemperature: 3800, intensity: 0.8, angle: 55, positionX: 0.5, positionY: 1.8, positionZ: 2.5 },
+    artworkIds: [],
+    useCount: 0,
+    isPublic: true,
+  },
+  {
+    name: '极简冷调照明',
+    description: '冷调白光，营造极简主义冷静氛围',
+    category: 'minimalist',
+    tags: ['极简', '冷调', '现代'],
+    lighting: { type: 'ambient', colorTemperature: 5500, intensity: 0.6, angle: 90, positionX: 0, positionY: 3, positionZ: 3.5 },
+    artworkIds: [],
+    useCount: 0,
+    isPublic: true,
+  },
+  {
+    name: '戏剧性聚光',
+    description: '高对比度聚光，营造戏剧性视觉焦点',
+    category: 'dramatic',
+    tags: ['戏剧', '聚焦', '高对比'],
+    lighting: { type: 'spotlight', colorTemperature: 2800, intensity: 0.9, angle: 25, positionX: 0, positionY: 2.8, positionZ: 2 },
+    artworkIds: [],
+    useCount: 0,
+    isPublic: true,
+  },
+  {
+    name: '自然光模拟',
+    description: '模拟自然日光，呈现作品最真实的色彩',
+    category: 'natural',
+    tags: ['自然', '日光', '真实'],
+    lighting: { type: 'floodlight', colorTemperature: 6500, intensity: 0.7, angle: 70, positionX: 0, positionY: 3, positionZ: 4 },
+    artworkIds: [],
+    useCount: 0,
+    isPublic: true,
+  },
+];
+
+export const DEFAULT_MATERIAL_COMBOS: Omit<MaterialCombo, 'id' | 'createdAt' | 'updatedAt'>[] = [
+  {
+    name: '金色画框配哑光墙',
+    description: '经典金色画框搭配深灰哑光墙，适合古典作品',
+    category: 'classic_gallery',
+    tags: ['经典', '金色', '哑光'],
+    material: { frameMaterial: 'gold', wallMaterial: 'matte', reflectivity: 0.25, roughness: 0.75 },
+    artworkIds: [],
+    useCount: 0,
+    isPublic: true,
+  },
+  {
+    name: '现代白框白墙',
+    description: '简洁白色画框配白墙，白盒子空间标准配置',
+    category: 'white_cube',
+    tags: ['现代', '白色', '极简'],
+    material: { frameMaterial: 'none', wallMaterial: 'satin', reflectivity: 0.15, roughness: 0.6 },
+    artworkIds: [],
+    useCount: 0,
+    isPublic: true,
+  },
+  {
+    name: '工业金属水泥墙',
+    description: '银色金属画框配水泥质感墙面，工业风格',
+    category: 'industrial',
+    tags: ['工业', '金属', '水泥'],
+    material: { frameMaterial: 'metal', wallMaterial: 'concrete', reflectivity: 0.35, roughness: 0.8 },
+    artworkIds: [],
+    useCount: 0,
+    isPublic: true,
+  },
+  {
+    name: '温暖木纹配丝光墙',
+    description: '深木色画框配丝光墙面，温暖雅致的展示效果',
+    category: 'warm_wood',
+    tags: ['温暖', '木质', '丝光'],
+    material: { frameMaterial: 'wood', wallMaterial: 'satin', reflectivity: 0.3, roughness: 0.65 },
+    artworkIds: [],
+    useCount: 0,
+    isPublic: true,
+  },
+  {
+    name: '奢华金框高光墙',
+    description: '金色画框配高光墙面，营造奢华典藏氛围',
+    category: 'luxury',
+    tags: ['奢华', '金色', '高光'],
+    material: { frameMaterial: 'gold', wallMaterial: 'glossy', reflectivity: 0.5, roughness: 0.3 },
+    artworkIds: [],
+    useCount: 0,
+    isPublic: true,
+  },
+  {
+    name: '银色金属冷调',
+    description: '银色金属画框配哑光墙，冷调现代风格',
+    category: 'cool_metal',
+    tags: ['冷调', '银色', '现代'],
+    material: { frameMaterial: 'silver', wallMaterial: 'matte', reflectivity: 0.3, roughness: 0.7 },
+    artworkIds: [],
+    useCount: 0,
+    isPublic: true,
+  },
+  {
+    name: '博物馆标准配置',
+    description: '无框展示配专业博物馆墙面，最大化作品本身',
+    category: 'modern_museum',
+    tags: ['博物馆', '无框', '专业'],
+    material: { frameMaterial: 'none', wallMaterial: 'matte', reflectivity: 0.1, roughness: 0.8 },
+    artworkIds: [],
+    useCount: 0,
+    isPublic: true,
+  },
 ];

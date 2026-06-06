@@ -1,4 +1,16 @@
-import type { Preset, LightingConfig, MaterialConfig, GalleryScheme, CuratorProject, CustomerProposal, ExhibitionWallConfig } from '../types';
+import type {
+  Preset,
+  LightingConfig,
+  MaterialConfig,
+  GalleryScheme,
+  CuratorProject,
+  CustomerProposal,
+  ExhibitionWallConfig,
+  LightingTemplate,
+  MaterialCombo,
+  SceneRecommendation,
+  ThemeCollection,
+} from '../types';
 
 const PRESETS_KEY = 'artwork_preview_presets';
 const LAST_ARTWORK_KEY = 'artwork_preview_last_artwork';
@@ -12,6 +24,10 @@ const CURRENT_PROJECT_KEY = 'artwork_preview_current_project';
 const PROPOSALS_KEY = 'artwork_preview_proposals';
 const CURRENT_PROPOSAL_KEY = 'artwork_preview_current_proposal';
 const EXHIBITION_WALL_CONFIG_KEY = 'artwork_preview_exhibition_wall_config';
+const LIGHTING_TEMPLATES_KEY = 'artwork_preview_lighting_templates';
+const MATERIAL_COMBOS_KEY = 'artwork_preview_material_combos';
+const SCENE_RECOMMENDATIONS_KEY = 'artwork_preview_scene_recommendations';
+const THEME_COLLECTIONS_KEY = 'artwork_preview_theme_collections';
 
 export interface ProjectExportData {
   project: CuratorProject;
@@ -394,4 +410,112 @@ export function loadExhibitionWallConfig(): ExhibitionWallConfig | null {
     console.error('Failed to load exhibition wall config:', e);
     return null;
   }
+}
+
+export function saveLightingTemplates(templates: LightingTemplate[]): void {
+  try {
+    localStorage.setItem(LIGHTING_TEMPLATES_KEY, JSON.stringify(templates));
+  } catch (e) {
+    console.error('Failed to save lighting templates:', e);
+  }
+}
+
+export function loadLightingTemplates(): LightingTemplate[] {
+  try {
+    const data = localStorage.getItem(LIGHTING_TEMPLATES_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch (e) {
+    console.error('Failed to load lighting templates:', e);
+    return [];
+  }
+}
+
+export function saveMaterialCombos(combos: MaterialCombo[]): void {
+  try {
+    localStorage.setItem(MATERIAL_COMBOS_KEY, JSON.stringify(combos));
+  } catch (e) {
+    console.error('Failed to save material combos:', e);
+  }
+}
+
+export function loadMaterialCombos(): MaterialCombo[] {
+  try {
+    const data = localStorage.getItem(MATERIAL_COMBOS_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch (e) {
+    console.error('Failed to load material combos:', e);
+    return [];
+  }
+}
+
+export function saveSceneRecommendations(recommendations: SceneRecommendation[]): void {
+  try {
+    localStorage.setItem(SCENE_RECOMMENDATIONS_KEY, JSON.stringify(recommendations));
+  } catch (e) {
+    console.error('Failed to save scene recommendations:', e);
+  }
+}
+
+export function loadSceneRecommendations(): SceneRecommendation[] {
+  try {
+    const data = localStorage.getItem(SCENE_RECOMMENDATIONS_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch (e) {
+    console.error('Failed to load scene recommendations:', e);
+    return [];
+  }
+}
+
+export function saveThemeCollections(collections: ThemeCollection[]): void {
+  try {
+    localStorage.setItem(THEME_COLLECTIONS_KEY, JSON.stringify(collections));
+  } catch (e) {
+    console.error('Failed to save theme collections:', e);
+  }
+}
+
+export function loadThemeCollections(): ThemeCollection[] {
+  try {
+    const data = localStorage.getItem(THEME_COLLECTIONS_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch (e) {
+    console.error('Failed to load theme collections:', e);
+    return [];
+  }
+}
+
+export function exportLightingTemplate(template: LightingTemplate): void {
+  const blob = new Blob([JSON.stringify(template, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `lighting_${template.name.replace(/\s+/g, '_')}_${template.id}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+export function exportMaterialCombo(combo: MaterialCombo): void {
+  const blob = new Blob([JSON.stringify(combo, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `material_${combo.name.replace(/\s+/g, '_')}_${combo.id}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+export function exportThemeCollection(collection: ThemeCollection): void {
+  const blob = new Blob([JSON.stringify(collection, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `theme_${collection.name.replace(/\s+/g, '_')}_${collection.id}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }

@@ -16,6 +16,7 @@ import {
   FolderOpen,
   Archive,
   Grid3X3,
+  BookOpen,
 } from 'lucide-react';
 import { useAppStore } from './store/useAppStore';
 import { ArtworkList } from './components/ArtworkList/ArtworkList';
@@ -30,6 +31,7 @@ import { CuratorHub } from './components/CuratorHub/CuratorHub';
 import { ProposalShareView } from './components/ProposalView/ProposalShareView';
 import { ArtworkIngestionWorkstation } from './components/ArtworkIngestionWorkstation/ArtworkIngestionWorkstation';
 import { ExhibitionWallConfig } from './components/ExhibitionWallConfig/ExhibitionWallConfig';
+import { ThemeLibrary } from './components/ThemeLibrary/ThemeLibrary';
 import type { AppState, AppMode } from './types';
 import { APP_MODE_LABELS, PROJECT_STATUS_LABELS } from './types';
 
@@ -43,6 +45,7 @@ const tabs: { id: PanelTab; label: string; icon: React.ReactNode }[] = [
   { id: 'compare', label: '对比', icon: <GitCompare className="w-4 h-4" /> },
   { id: 'storage', label: '保存', icon: <Save className="w-4 h-4" /> },
   { id: 'workstation', label: '入库', icon: <Archive className="w-4 h-4" /> },
+  { id: 'themeLibrary', label: '馆藏', icon: <BookOpen className="w-4 h-4" /> },
 ];
 
 const artworkModeTabs: { id: PanelTab; label: string; icon: React.ReactNode }[] = [
@@ -52,6 +55,7 @@ const artworkModeTabs: { id: PanelTab; label: string; icon: React.ReactNode }[] 
   { id: 'compare', label: '对比', icon: <GitCompare className="w-4 h-4" /> },
   { id: 'storage', label: '保存', icon: <Save className="w-4 h-4" /> },
   { id: 'workstation', label: '入库', icon: <Archive className="w-4 h-4" /> },
+  { id: 'themeLibrary', label: '馆藏', icon: <BookOpen className="w-4 h-4" /> },
 ];
 
 export default function App() {
@@ -140,6 +144,8 @@ export default function App() {
         return <StoragePanel />;
       case 'workstation':
         return <ArtworkIngestionWorkstation />;
+      case 'themeLibrary':
+        return <ThemeLibrary />;
       default:
         return appMode === 'curator' ? <SchemeOrchestrator /> : <LightingPanel />;
     }

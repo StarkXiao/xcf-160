@@ -1,0 +1,1 @@
+export { LightingTemplatePanel } from './LightingTemplatePanel';
