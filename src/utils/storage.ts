@@ -6,6 +6,7 @@ const LAST_LIGHTING_KEY = 'artwork_preview_last_lighting';
 const LAST_MATERIAL_KEY = 'artwork_preview_last_material';
 const GALLERY_SCHEMES_KEY = 'artwork_preview_gallery_schemes';
 const CURRENT_SCHEME_KEY = 'artwork_preview_current_scheme';
+const APP_MODE_KEY = 'artwork_preview_app_mode';
 
 export function savePresets(presets: Preset[]): void {
   try {
@@ -167,4 +168,21 @@ export function importScheme(file: File): Promise<GalleryScheme> {
     reader.onerror = () => reject(new Error('Failed to read file'));
     reader.readAsText(file);
   });
+}
+
+export function saveAppMode(mode: string): void {
+  try {
+    localStorage.setItem(APP_MODE_KEY, mode);
+  } catch (e) {
+    console.error('Failed to save app mode:', e);
+  }
+}
+
+export function loadAppMode(): string | null {
+  try {
+    return localStorage.getItem(APP_MODE_KEY);
+  } catch (e) {
+    console.error('Failed to load app mode:', e);
+    return null;
+  }
 }

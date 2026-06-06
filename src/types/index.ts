@@ -84,6 +84,7 @@ export interface GalleryScheme {
 }
 
 export type SchemePanelTab = 'layout' | 'lighting' | 'snapshots';
+export type AppMode = 'artwork' | 'curator';
 
 export interface AppState {
   artworks: Artwork[];
@@ -97,6 +98,7 @@ export interface AppState {
   currentSchemeId: string | null;
   selectedWallArtworkIds: string[];
   schemePanelTab: SchemePanelTab;
+  appMode: AppMode;
 }
 
 export const LIGHT_TYPE_LABELS: Record<LightType, string> = {
@@ -163,3 +165,8 @@ export const SCHEME_PANEL_TABS: { id: SchemePanelTab; label: string }[] = [
   { id: 'lighting', label: '灯光策略' },
   { id: 'snapshots', label: '方案快照' },
 ];
+
+export const APP_MODE_LABELS: Record<AppMode, string> = {
+  artwork: '单作品预览',
+  curator: '展厅编排',
+};

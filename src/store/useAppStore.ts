@@ -10,6 +10,7 @@ import type {
   WallPosition,
   LightingStrategy,
   SchemePanelTab,
+  AppMode,
 } from '../types';
 import {
   DEFAULT_LIGHTING,
@@ -31,6 +32,8 @@ import {
   saveGallerySchemes,
   loadCurrentSchemeId,
   saveCurrentSchemeId,
+  loadAppMode,
+  saveAppMode,
 } from '../utils/storage';
 
 interface AppStore extends AppState {
@@ -67,6 +70,7 @@ interface AppStore extends AppState {
   importScheme: (scheme: GalleryScheme) => void;
   saveSchemeSnapshot: (schemeId: string, name: string) => void;
   setSchemeWallMaterial: (wallMaterial: AppState['material']['wallMaterial']) => void;
+  setAppMode: (mode: AppMode) => void;
 }
 
 const getInitialState = (): AppState => {
@@ -76,9 +80,11 @@ const getInitialState = (): AppState => {
   const savedPresets = loadPresets();
   const savedSchemes = loadGallerySchemes();
   const savedCurrentSchemeId = loadCurrentSchemeId();
+  const savedAppMode = loadAppMode();
 
   const schemes = savedSchemes.length > 0 ? savedSchemes : mockGallerySchemes;
   const currentSchemeId = savedCurrentSchemeId || schemes[0]?.id || null;
+  const appMode = (savedAppMode as AppMode) || 'curator';
 
   return {
     artworks: mockArtworks,
@@ -92,6 +98,7 @@ const getInitialState = (): AppState => {
     currentSchemeId,
     selectedWallArtworkIds: [],
     schemePanelTab: 'layout',
+    appMode,
   };
 };
 
@@ -556,5 +563,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
       ),
     }));
     saveGallerySchemes(get().gallerySchemes);
+  },
+
+  setAppMode: (mode) => {
+    set({ appMode: mode, selectedWallArtworkIds: [] });
+    saveAppMode(mode);
   },
 }));
