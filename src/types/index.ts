@@ -119,6 +119,174 @@ export interface LightingStrategy {
   }[];
 }
 
+export interface LightingHistoryRecord {
+  id: string;
+  timestamp: number;
+  lighting: LightingConfig;
+  description?: string;
+  source?: 'user' | 'preset' | 'recommendation' | 'template' | 'reset';
+  parameters?: Partial<LightingConfig>;
+}
+
+export type LightingHistoryEntry = LightingHistoryRecord;
+
+export interface LightingParameterConstraint {
+  type: LightType;
+  intensityRange: { min: number; max: number };
+  angleRange: { min: number; max: number };
+  temperatureRange: { min: number; max: number };
+  linkedParameters: Array<{
+    source: keyof LightingConfig;
+    target: keyof LightingConfig;
+    formula: (sourceValue: number) => number;
+    description: string;
+  }>;
+}
+
+export interface LightingRecommendation {
+  id: string;
+  name: string;
+  description: string;
+  lighting: Partial<LightingConfig>;
+  matchReason: string;
+  confidence: number;
+  tags: string[];
+  artworkMedium?: string;
+}
+
+export type LightingPanelTab = 'parameters' | 'presets' | 'history' | 'recommendations';
+
+export const LIGHTING_PARAMETER_CONSTRAINTS: Record<LightType, LightingParameterConstraint> = {
+  spotlight: {
+    type: 'spotlight',
+    intensityRange: { min: 0.3, max: 1 },
+    angleRange: { min: 15, max: 60 },
+    temperatureRange: { min: 2000, max: 6500 },
+    linkedParameters: [
+      {
+        source: 'angle',
+        target: 'intensity',
+        formula: (angle) => Math.min(1, 0.3 + (60 - angle) / 60),
+        description: '光束角度越小，亮度建议越高',
+      },
+    ],
+  },
+  floodlight: {
+    type: 'floodlight',
+    intensityRange: { min: 0.2, max: 0.8 },
+    angleRange: { min: 45, max: 90 },
+    temperatureRange: { min: 2500, max: 7500 },
+    linkedParameters: [
+      {
+        source: 'angle',
+        target: 'intensity',
+        formula: (angle) => Math.min(0.8, 0.2 + (90 - angle) / 112.5),
+        description: '泛光角度越大，亮度建议越低',
+      },
+    ],
+  },
+  ambient: {
+    type: 'ambient',
+    intensityRange: { min: 0.1, max: 0.6 },
+    angleRange: { min: 60, max: 90 },
+    temperatureRange: { min: 2700, max: 10000 },
+    linkedParameters: [
+      {
+        source: 'colorTemperature',
+        target: 'intensity',
+        formula: (temp) => Math.min(0.6, 0.1 + (temp - 2700) / 18200),
+        description: '色温越高，环境光亮度可适当提高',
+      },
+    ],
+  },
+};
+
+export const LIGHTING_RECOMMENDATIONS: LightingRecommendation[] = [
+  {
+    id: 'rec-oil-painting',
+    name: '油画经典',
+    description: '温暖聚光突出油画厚重质感和笔触层次',
+    lighting: { type: 'spotlight', colorTemperature: 3200, intensity: 0.85, angle: 35 },
+    matchReason: '油画作品适合低色温柔和聚光，展现颜料的厚重感',
+    confidence: 0.9,
+    tags: ['油画', '经典', '温暖'],
+    artworkMedium: '油画',
+  },
+  {
+    id: 'rec-watercolor',
+    name: '水彩柔和',
+    description: '柔和泛光展现水彩通透感和色彩层次',
+    lighting: { type: 'floodlight', colorTemperature: 4500, intensity: 0.65, angle: 60 },
+    matchReason: '水彩作品需要柔和均匀的光线，避免强烈反光',
+    confidence: 0.85,
+    tags: ['水彩', '柔和', '通透'],
+    artworkMedium: '水彩',
+  },
+  {
+    id: 'rec-photography',
+    name: '摄影保真',
+    description: '中性白光准确还原摄影作品色彩细节',
+    lighting: { type: 'spotlight', colorTemperature: 5000, intensity: 0.75, angle: 40 },
+    matchReason: '摄影作品需要中性色温以准确还原色彩',
+    confidence: 0.92,
+    tags: ['摄影', '保真', '中性'],
+    artworkMedium: '摄影',
+  },
+  {
+    id: 'rec-sculpture',
+    name: '雕塑立体',
+    description: '多维度光影突出雕塑立体感和材质表现',
+    lighting: { type: 'floodlight', colorTemperature: 3800, intensity: 0.8, angle: 55 },
+    matchReason: '雕塑作品需要较大的光束角度来塑造立体感',
+    confidence: 0.8,
+    tags: ['雕塑', '立体', '材质'],
+    artworkMedium: '雕塑',
+  },
+  {
+    id: 'rec-dramatic',
+    name: '戏剧聚焦',
+    description: '高对比度聚光营造戏剧性视觉焦点',
+    lighting: { type: 'spotlight', colorTemperature: 2800, intensity: 0.9, angle: 25 },
+    matchReason: '适合需要突出视觉重点的展览场景',
+    confidence: 0.75,
+    tags: ['戏剧', '聚焦', '高对比'],
+  },
+  {
+    id: 'rec-minimalist',
+    name: '极简冷调',
+    description: '冷调白光营造极简主义冷静氛围',
+    lighting: { type: 'ambient', colorTemperature: 5500, intensity: 0.6, angle: 90 },
+    matchReason: '现代极简风格作品适合冷色调环境光',
+    confidence: 0.78,
+    tags: ['极简', '冷调', '现代'],
+  },
+  {
+    id: 'rec-natural',
+    name: '自然光模拟',
+    description: '模拟北向自然光，呈现作品最真实的色彩',
+    lighting: { type: 'floodlight', colorTemperature: 6500, intensity: 0.7, angle: 70 },
+    matchReason: '北向自然光被认为是艺术品观赏的标准光源',
+    confidence: 0.88,
+    tags: ['自然', '真实', '标准'],
+  },
+  {
+    id: 'rec-warm-gallery',
+    name: '画廊暖光',
+    description: '传统画廊暖光营造优雅温馨的观赏氛围',
+    lighting: { type: 'spotlight', colorTemperature: 3000, intensity: 0.8, angle: 45 },
+    matchReason: '传统画廊常用的暖色调照明方案',
+    confidence: 0.82,
+    tags: ['画廊', '温暖', '经典'],
+  },
+];
+
+export const LIGHTING_PANEL_TABS: { id: LightingPanelTab; label: string; icon: string }[] = [
+  { id: 'parameters', label: '参数', icon: 'sliders' },
+  { id: 'presets', label: '预设', icon: 'bookmark' },
+  { id: 'history', label: '历史', icon: 'history' },
+  { id: 'recommendations', label: '推荐', icon: 'sparkles' },
+];
+
 export interface ArtworkGroup {
   id: string;
   name: string;
@@ -768,6 +936,10 @@ export interface AppState {
   artworkFilterTagIds: string[];
   lighting: LightingConfig;
   material: MaterialConfig;
+  lightingHistory: LightingHistoryRecord[];
+  lightingHistoryIndex: number;
+  lightingPanelTab: LightingPanelTab;
+  lightingAutoLink: boolean;
   presets: Preset[];
   presetGroups: PresetGroup[];
   selectedPresetGroupId: string | null;
@@ -823,6 +995,9 @@ export interface AppState {
   tourAdaptationPanelTab: TourAdaptationPanelTab;
   isPerformingAdaptation: boolean;
   compareView: CompareViewState;
+  lightingPresets: LightingPreset[];
+  selectedLightingPresetId: string | null;
+  lightingValidationWarnings: LightingParameterWarning[];
 }
 
 export const APPROVAL_STATUS_LABELS: Record<ApprovalStatus, string> = {
@@ -2030,3 +2205,89 @@ export interface BatchDeleteResult {
   totalCount: number;
   skippedArtworks: { id: string; title: string; reason: string }[];
 }
+
+export interface LightingPreset {
+  id: string;
+  name: string;
+  description?: string;
+  lighting: LightingConfig;
+  tags: string[];
+  createdAt: number;
+  updatedAt: number;
+  useCount: number;
+  isFavorite: boolean;
+}
+
+export interface LightingValidationResult {
+  isValid: boolean;
+  warnings: LightingParameterWarning[];
+  autoAdjusted?: Partial<LightingConfig>;
+}
+
+export interface LightingParameterWarning {
+  param: keyof LightingConfig;
+  message: string;
+  severity: 'info' | 'warning' | 'error';
+  suggestion?: Partial<LightingConfig>;
+}
+
+export const LIGHTING_PARAM_LABELS: Record<keyof LightingConfig, string> = {
+  type: '光源类型',
+  colorTemperature: '色温',
+  intensity: '亮度',
+  angle: '光束角度',
+  positionX: '水平位置',
+  positionY: '垂直位置',
+  positionZ: '照射距离',
+};
+
+export const DEFAULT_LIGHTING_PRESETS: Omit<LightingPreset, 'id' | 'createdAt' | 'updatedAt'>[] = [
+  {
+    name: '博物馆标准',
+    description: '专业博物馆级别的照明配置，保护作品同时展现细节',
+    lighting: {
+      type: 'spotlight',
+      colorTemperature: 3500,
+      intensity: 0.7,
+      angle: 40,
+      positionX: 0,
+      positionY: 2,
+      positionZ: 3,
+    },
+    tags: ['标准', '博物馆', '专业'],
+    useCount: 0,
+    isFavorite: true,
+  },
+  {
+    name: '戏剧效果',
+    description: '高对比度聚光，营造戏剧性视觉效果',
+    lighting: {
+      type: 'spotlight',
+      colorTemperature: 3000,
+      intensity: 0.9,
+      angle: 25,
+      positionX: 0.5,
+      positionY: 2.5,
+      positionZ: 2.5,
+    },
+    tags: ['戏剧', '高对比', '聚光'],
+    useCount: 0,
+    isFavorite: false,
+  },
+  {
+    name: '均匀照明',
+    description: '泛光照明，适合大面积作品展示',
+    lighting: {
+      type: 'floodlight',
+      colorTemperature: 4200,
+      intensity: 0.6,
+      angle: 70,
+      positionX: 0,
+      positionY: 2,
+      positionZ: 3.5,
+    },
+    tags: ['均匀', '大面积', '泛光'],
+    useCount: 0,
+    isFavorite: false,
+  },
+];

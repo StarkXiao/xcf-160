@@ -70,6 +70,13 @@ import type {
   BatchImportError,
   BatchDeleteResult,
   BatchDeleteMode,
+  LightingPreset,
+  LightingHistoryRecord,
+  LightingPanelTab,
+  LightingParameterWarning,
+  LightingValidationResult,
+  LightingRecommendation,
+  LightingParameterConstraint,
 } from '../types';
 import {
   DEFAULT_LIGHTING,
@@ -103,6 +110,9 @@ import {
   LOCAL_PRESET_SORT_TYPES,
   DEFAULT_COMPARE_VIEW_STATE,
   COMPARE_PARAMETER_LABELS,
+  DEFAULT_LIGHTING_PRESETS,
+  LIGHTING_PARAMETER_CONSTRAINTS,
+  LIGHTING_RECOMMENDATIONS,
 } from '../types';
 import type { LocalPresetSortType } from '../types';
 import type {
@@ -161,17 +171,34 @@ import {
   exportLightingTemplate as exportLightingTemplateUtil,
   exportMaterialCombo as exportMaterialComboUtil,
   exportThemeCollection as exportThemeCollectionUtil,
+  saveLightingPresets,
+  loadLightingPresets,
+  saveLightingHistory,
+  loadLightingHistory,
 } from '../utils/storage';
 import {
   performTourAdaptation,
   applyAdaptationToScheme,
 } from '../utils/tourAdaptation';
+import {
+  getRecommendationsForArtwork,
+  getLightingRecommendations as getLightingRecommendationsUtil,
+} from '../utils/lighting';
 
 interface AppStore extends AppState {
   setSelectedArtwork: (id: string | null) => void;
-  setLighting: (lighting: Partial<LightingConfig>) => void;
+  setLighting: (lighting: Partial<LightingConfig>, skipHistory?: boolean) => void;
   setMaterial: (material: Partial<MaterialConfig>) => void;
   setActivePanel: (panel: AppState['activePanel']) => void;
+  undoLighting: () => void;
+  redoLighting: () => void;
+  clearLightingHistory: () => void;
+  setLightingPanelTab: (tab: LightingPanelTab) => void;
+  setLightingAutoLink: (enabled: boolean) => void;
+  getLinkedParameterSuggestion: (source: keyof LightingConfig, value: number) => { target: keyof LightingConfig; suggestedValue: number; description: string } | null;
+  getLightingRecommendations: (artworkMedium?: string, currentLighting?: LightingConfig) => LightingRecommendation[];
+  saveLightingPreset: (name: string, description?: string, category?: string) => void;
+  applyLightingRecommendation: (recommendation: LightingRecommendation) => void;
   savePreset: (name: string) => void;
   deletePreset: (id: string) => void;
   loadPreset: (preset: Preset) => void;
@@ -410,6 +437,19 @@ interface AppStore extends AppState {
   batchResetToDefault: (targetPresetIds: string[], parameterKeys?: CompareParameterKey[]) => void;
   executeBatchOperation: (config: BatchOperationConfig) => void;
   resetCompareView: () => void;
+
+  createLightingPreset: (name: string, description?: string, tags?: string[]) => LightingPreset;
+  updateLightingPreset: (id: string, updates: Partial<LightingPreset>) => void;
+  deleteLightingPreset: (id: string) => void;
+  applyLightingPreset: (id: string) => void;
+  toggleLightingPresetFavorite: (id: string) => void;
+  selectLightingPreset: (id: string | null) => void;
+  getFilteredLightingPresets: (query?: string, favoriteOnly?: boolean) => LightingPreset[];
+  canUndoLighting: () => boolean;
+  canRedoLighting: () => boolean;
+  jumpToLightingHistory: (index: number) => void;
+  validateLightingConfig: (lighting: Partial<LightingConfig>) => LightingValidationResult;
+  setLightingWithHistory: (lighting: Partial<LightingConfig>, description?: string) => void;
 }
 
 const getInitialState = (): AppState => {
@@ -430,6 +470,8 @@ const getInitialState = (): AppState => {
   const savedSceneRecommendations = loadSceneRecommendations();
   const savedThemeCollections = loadThemeCollections();
   const savedPresetGroups = loadPresetGroups();
+  const savedLightingPresets = loadLightingPresets();
+  const savedLightingHistory = loadLightingHistory();
 
   const schemes = savedSchemes.length > 0 ? savedSchemes : mockGallerySchemes;
   const projects = savedProjects.length > 0 ? savedProjects : mockCuratorProjects;
@@ -456,6 +498,26 @@ const getInitialState = (): AppState => {
     ...p,
   }));
 
+  const initialLighting = savedLighting || DEFAULT_LIGHTING;
+  const initialHistory: LightingHistoryRecord[] = savedLightingHistory.length > 0
+    ? savedLightingHistory
+    : [{
+        id: `history-${Date.now()}`,
+        timestamp: Date.now(),
+        lighting: { ...initialLighting },
+        description: '初始配置',
+        parameters: {},
+      }];
+
+  const lightingPresets = savedLightingPresets.length > 0
+    ? savedLightingPresets
+    : DEFAULT_LIGHTING_PRESETS.map((p, i) => ({
+        ...p,
+        id: `lighting-preset-${i + 1}`,
+        createdAt: Date.now() - 86400000 * (30 - i * 5),
+        updatedAt: Date.now() - 86400000 * (15 - i * 2),
+      }));
+
   return {
     artworks: mockArtworks,
     selectedArtworkId: savedArtworkId || mockArtworks[0]?.id || null,
@@ -463,7 +525,11 @@ const getInitialState = (): AppState => {
     artworkSortType: 'createdAt',
     artworkSortDirection: 'desc',
     artworkFilterTagIds: [],
-    lighting: savedLighting || DEFAULT_LIGHTING,
+    lighting: initialLighting,
+    lightingHistory: initialHistory,
+    lightingHistoryIndex: 0,
+    lightingPanelTab: 'parameters',
+    lightingAutoLink: true,
     material: savedMaterial || DEFAULT_MATERIAL,
     presets: migratedPresets,
     presetGroups,
@@ -525,6 +591,9 @@ const getInitialState = (): AppState => {
     tourAdaptationPanelTab: 'venue',
     isPerformingAdaptation: false,
     compareView: { ...DEFAULT_COMPARE_VIEW_STATE },
+    lightingPresets,
+    selectedLightingPresetId: null,
+    lightingValidationWarnings: [],
   };
 };
 
@@ -541,12 +610,345 @@ export const useAppStore = create<AppStore>((set, get) => ({
     if (id) saveLastArtwork(id);
   },
 
-  setLighting: (lighting) => {
+  setLighting: (lighting, skipHistory = false) => {
     set((state) => {
-      const newLighting = { ...state.lighting, ...lighting };
-      saveLastLighting(newLighting);
-      return { lighting: newLighting };
+      const currentType = lighting.type || state.lighting.type;
+      const constraint = LIGHTING_PARAMETER_CONSTRAINTS[currentType];
+      let updatedLighting = { ...state.lighting, ...lighting };
+
+      if (constraint && state.lightingAutoLink) {
+        for (const link of constraint.linkedParameters) {
+          const sourceKey = link.source as keyof LightingConfig;
+          const targetKey = link.target as keyof LightingConfig;
+          if (lighting[sourceKey] !== undefined && lighting[targetKey] === undefined) {
+            const sourceValue = lighting[sourceKey] as number;
+            const suggestedValue = link.formula(sourceValue);
+            (updatedLighting as Record<string, unknown>)[targetKey] = suggestedValue;
+          }
+        }
+      }
+
+      if (constraint) {
+        if (updatedLighting.intensity !== undefined) {
+          updatedLighting.intensity = Math.max(
+            constraint.intensityRange.min,
+            Math.min(constraint.intensityRange.max, updatedLighting.intensity)
+          );
+        }
+        if (updatedLighting.angle !== undefined) {
+          updatedLighting.angle = Math.max(
+            constraint.angleRange.min,
+            Math.min(constraint.angleRange.max, updatedLighting.angle)
+          );
+        }
+        if (updatedLighting.colorTemperature !== undefined) {
+          updatedLighting.colorTemperature = Math.max(
+            constraint.temperatureRange.min,
+            Math.min(constraint.temperatureRange.max, updatedLighting.colorTemperature)
+          );
+        }
+      }
+
+      saveLastLighting(updatedLighting);
+
+      if (skipHistory) {
+        return { lighting: updatedLighting };
+      }
+
+      const newHistory = state.lightingHistory.slice(0, state.lightingHistoryIndex + 1);
+      const description = Object.keys(lighting).join(', ');
+      const newRecord: LightingHistoryRecord = {
+        id: `history-${Date.now()}`,
+        timestamp: Date.now(),
+        lighting: { ...updatedLighting },
+        description,
+        parameters: { ...lighting },
+      };
+      newHistory.push(newRecord);
+
+      if (newHistory.length > 50) {
+        newHistory.shift();
+      }
+
+      return {
+        lighting: updatedLighting,
+        lightingHistory: newHistory,
+        lightingHistoryIndex: newHistory.length - 1,
+      };
     });
+  },
+
+  undoLighting: () => {
+    set((state) => {
+      if (state.lightingHistoryIndex <= 0) return state;
+      const newIndex = state.lightingHistoryIndex - 1;
+      const record = state.lightingHistory[newIndex];
+      saveLastLighting(record.lighting);
+      return {
+        lighting: { ...record.lighting },
+        lightingHistoryIndex: newIndex,
+      };
+    });
+  },
+
+  redoLighting: () => {
+    set((state) => {
+      if (state.lightingHistoryIndex >= state.lightingHistory.length - 1) return state;
+      const newIndex = state.lightingHistoryIndex + 1;
+      const record = state.lightingHistory[newIndex];
+      saveLastLighting(record.lighting);
+      return {
+        lighting: { ...record.lighting },
+        lightingHistoryIndex: newIndex,
+      };
+    });
+  },
+
+  clearLightingHistory: () => {
+    set((state) => {
+      const currentRecord: LightingHistoryRecord = {
+        id: `history-${Date.now()}`,
+        timestamp: Date.now(),
+        lighting: { ...state.lighting },
+        description: '当前配置',
+        parameters: {},
+      };
+      return {
+        lightingHistory: [currentRecord],
+        lightingHistoryIndex: 0,
+      };
+    });
+  },
+
+  setLightingPanelTab: (tab) => set({ lightingPanelTab: tab }),
+
+  setLightingAutoLink: (enabled) => set({ lightingAutoLink: enabled }),
+
+  getLinkedParameterSuggestion: (source, value) => {
+    const state = get();
+    const constraint = LIGHTING_PARAMETER_CONSTRAINTS[state.lighting.type];
+    if (!constraint) return null;
+    const link = constraint.linkedParameters.find((l) => l.source === source);
+    if (!link) return null;
+    return {
+      target: link.target,
+      suggestedValue: link.formula(value),
+      description: link.description,
+    };
+  },
+
+  getLightingRecommendations: (artworkMedium, currentLighting) => {
+    return getLightingRecommendationsUtil(artworkMedium, currentLighting);
+  },
+
+  saveLightingPreset: (name, description = '', category = 'custom') => {
+    const { lighting, lightingTemplates, selectedArtworkId } = get();
+    const now = Date.now();
+    const newTemplate: LightingTemplate = {
+      id: `lighting-template-${now}`,
+      name,
+      description,
+      category,
+      tags: [],
+      lighting: { ...lighting },
+      artworkIds: selectedArtworkId ? [selectedArtworkId] : [],
+      useCount: 0,
+      createdAt: now,
+      updatedAt: now,
+      isPublic: false,
+      isOfficial: false,
+    };
+    const newTemplates = [...lightingTemplates, newTemplate];
+    set({ lightingTemplates: newTemplates });
+    saveLightingTemplates(newTemplates);
+  },
+
+  applyLightingRecommendation: (recommendation) => {
+    get().setLighting(recommendation.lighting);
+  },
+
+  canUndoLighting: () => {
+    return get().lightingHistoryIndex > 0;
+  },
+
+  canRedoLighting: () => {
+    return get().lightingHistoryIndex < get().lightingHistory.length - 1;
+  },
+
+  jumpToLightingHistory: (index) => {
+    set((state) => {
+      if (index < 0 || index >= state.lightingHistory.length) return state;
+      const record = state.lightingHistory[index];
+      saveLastLighting(record.lighting);
+      return {
+        lighting: { ...record.lighting },
+        lightingHistoryIndex: index,
+      };
+    });
+  },
+
+  validateLightingConfig: (lighting) => {
+    const warnings: LightingParameterWarning[] = [];
+    const currentType = lighting.type || get().lighting.type;
+    const constraint = LIGHTING_PARAMETER_CONSTRAINTS[currentType];
+    let autoAdjusted: Partial<LightingConfig> | undefined;
+
+    if (constraint) {
+      if (lighting.intensity !== undefined && lighting.intensity < constraint.intensityRange.min) {
+        warnings.push({
+          param: 'intensity',
+          message: `亮度低于建议范围 ${constraint.intensityRange.min * 100}% - ${constraint.intensityRange.max * 100}%`,
+          severity: 'warning',
+          suggestion: { intensity: constraint.intensityRange.min },
+        });
+        autoAdjusted = { ...autoAdjusted, intensity: constraint.intensityRange.min };
+      }
+      if (lighting.intensity !== undefined && lighting.intensity > constraint.intensityRange.max) {
+        warnings.push({
+          param: 'intensity',
+          message: `亮度高于建议范围 ${constraint.intensityRange.min * 100}% - ${constraint.intensityRange.max * 100}%`,
+          severity: 'warning',
+          suggestion: { intensity: constraint.intensityRange.max },
+        });
+        autoAdjusted = { ...autoAdjusted, intensity: constraint.intensityRange.max };
+      }
+      if (lighting.angle !== undefined && lighting.angle < constraint.angleRange.min) {
+        warnings.push({
+          param: 'angle',
+          message: `光束角度低于建议范围 ${constraint.angleRange.min}° - ${constraint.angleRange.max}°`,
+          severity: 'warning',
+          suggestion: { angle: constraint.angleRange.min },
+        });
+        autoAdjusted = { ...autoAdjusted, angle: constraint.angleRange.min };
+      }
+      if (lighting.angle !== undefined && lighting.angle > constraint.angleRange.max) {
+        warnings.push({
+          param: 'angle',
+          message: `光束角度高于建议范围 ${constraint.angleRange.min}° - ${constraint.angleRange.max}°`,
+          severity: 'warning',
+          suggestion: { angle: constraint.angleRange.max },
+        });
+        autoAdjusted = { ...autoAdjusted, angle: constraint.angleRange.max };
+      }
+      if (lighting.colorTemperature !== undefined && lighting.colorTemperature < constraint.temperatureRange.min) {
+        warnings.push({
+          param: 'colorTemperature',
+          message: `色温低于建议范围 ${constraint.temperatureRange.min}K - ${constraint.temperatureRange.max}K`,
+          severity: 'info',
+          suggestion: { colorTemperature: constraint.temperatureRange.min },
+        });
+        autoAdjusted = { ...autoAdjusted, colorTemperature: constraint.temperatureRange.min };
+      }
+      if (lighting.colorTemperature !== undefined && lighting.colorTemperature > constraint.temperatureRange.max) {
+        warnings.push({
+          param: 'colorTemperature',
+          message: `色温高于建议范围 ${constraint.temperatureRange.min}K - ${constraint.temperatureRange.max}K`,
+          severity: 'info',
+          suggestion: { colorTemperature: constraint.temperatureRange.max },
+        });
+        autoAdjusted = { ...autoAdjusted, colorTemperature: constraint.temperatureRange.max };
+      }
+    }
+
+    return {
+      isValid: warnings.length === 0,
+      warnings,
+      autoAdjusted,
+    };
+  },
+
+  setLightingWithHistory: (lighting, description) => {
+    get().setLighting(lighting, false);
+    if (description) {
+      set((state) => {
+        const newHistory = [...state.lightingHistory];
+        newHistory[newHistory.length - 1] = {
+          ...newHistory[newHistory.length - 1],
+          description,
+        };
+        return { lightingHistory: newHistory };
+      });
+    }
+  },
+
+  createLightingPreset: (name, description = '', tags = []) => {
+    const { lighting, lightingPresets } = get();
+    const now = Date.now();
+    const newPreset: LightingPreset = {
+      id: `lighting-preset-${now}`,
+      name,
+      description,
+      lighting: { ...lighting },
+      tags,
+      createdAt: now,
+      updatedAt: now,
+      useCount: 0,
+      isFavorite: false,
+    };
+    const newPresets = [...lightingPresets, newPreset];
+    set({ lightingPresets: newPresets });
+    saveLightingPresets(newPresets);
+    return newPreset;
+  },
+
+  updateLightingPreset: (id, updates) => {
+    const { lightingPresets } = get();
+    const newPresets = lightingPresets.map((p) =>
+      p.id === id ? { ...p, ...updates, updatedAt: Date.now() } : p
+    );
+    set({ lightingPresets: newPresets });
+    saveLightingPresets(newPresets);
+  },
+
+  deleteLightingPreset: (id) => {
+    const { lightingPresets, selectedLightingPresetId } = get();
+    const newPresets = lightingPresets.filter((p) => p.id !== id);
+    set({
+      lightingPresets: newPresets,
+      selectedLightingPresetId: selectedLightingPresetId === id ? null : selectedLightingPresetId,
+    });
+    saveLightingPresets(newPresets);
+  },
+
+  applyLightingPreset: (id) => {
+    const { lightingPresets } = get();
+    const preset = lightingPresets.find((p) => p.id === id);
+    if (!preset) return;
+    get().setLighting(preset.lighting);
+    const newPresets = lightingPresets.map((p) =>
+      p.id === id ? { ...p, useCount: p.useCount + 1, updatedAt: Date.now() } : p
+    );
+    set({ lightingPresets: newPresets });
+    saveLightingPresets(newPresets);
+  },
+
+  toggleLightingPresetFavorite: (id) => {
+    const { lightingPresets } = get();
+    const newPresets = lightingPresets.map((p) =>
+      p.id === id ? { ...p, isFavorite: !p.isFavorite, updatedAt: Date.now() } : p
+    );
+    set({ lightingPresets: newPresets });
+    saveLightingPresets(newPresets);
+  },
+
+  selectLightingPreset: (id) => set({ selectedLightingPresetId: id }),
+
+  getFilteredLightingPresets: (query = '', favoriteOnly = false) => {
+    const { lightingPresets } = get();
+    let filtered = [...lightingPresets];
+    if (favoriteOnly) {
+      filtered = filtered.filter((p) => p.isFavorite);
+    }
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      filtered = filtered.filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          p.description?.toLowerCase().includes(q) ||
+          p.tags.some((t) => t.toLowerCase().includes(q))
+      );
+    }
+    return filtered.sort((a, b) => b.updatedAt - a.updatedAt);
   },
 
   setMaterial: (material) => {

@@ -11,6 +11,8 @@ import type {
   MaterialCombo,
   SceneRecommendation,
   ThemeCollection,
+  LightingPreset,
+  LightingHistoryEntry,
 } from '../types';
 
 const PRESETS_KEY = 'artwork_preview_presets';
@@ -31,6 +33,8 @@ const LIGHTING_TEMPLATES_KEY = 'artwork_preview_lighting_templates';
 const MATERIAL_COMBOS_KEY = 'artwork_preview_material_combos';
 const SCENE_RECOMMENDATIONS_KEY = 'artwork_preview_scene_recommendations';
 const THEME_COLLECTIONS_KEY = 'artwork_preview_theme_collections';
+const LIGHTING_PRESETS_KEY = 'artwork_preview_lighting_presets';
+const LIGHTING_HISTORY_KEY = 'artwork_preview_lighting_history';
 
 export interface ProjectExportData {
   project: CuratorProject;
@@ -557,4 +561,40 @@ export function exportThemeCollection(collection: ThemeCollection): void {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+export function saveLightingPresets(presets: LightingPreset[]): void {
+  try {
+    localStorage.setItem(LIGHTING_PRESETS_KEY, JSON.stringify(presets));
+  } catch (e) {
+    console.error('Failed to save lighting presets:', e);
+  }
+}
+
+export function loadLightingPresets(): LightingPreset[] {
+  try {
+    const data = localStorage.getItem(LIGHTING_PRESETS_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch (e) {
+    console.error('Failed to load lighting presets:', e);
+    return [];
+  }
+}
+
+export function saveLightingHistory(history: LightingHistoryEntry[]): void {
+  try {
+    localStorage.setItem(LIGHTING_HISTORY_KEY, JSON.stringify(history));
+  } catch (e) {
+    console.error('Failed to save lighting history:', e);
+  }
+}
+
+export function loadLightingHistory(): LightingHistoryEntry[] {
+  try {
+    const data = localStorage.getItem(LIGHTING_HISTORY_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch (e) {
+    console.error('Failed to load lighting history:', e);
+    return [];
+  }
 }
