@@ -82,6 +82,16 @@ import type {
   MaterialRecommendation,
   MaterialEffectPreview,
   MaterialComboFavorite,
+  StorageHealthStatus,
+  StorageMetadata,
+  StorageBackup,
+  BackupInfo,
+  StorageConflict,
+  ConflictResolutionStrategy,
+  ImportValidationResult,
+  ImportResult,
+  StorageConfig,
+  StorageSnapshot,
 } from '../types';
 import {
   DEFAULT_LIGHTING,
@@ -180,6 +190,24 @@ import {
   loadLightingPresets,
   saveLightingHistory,
   loadLightingHistory,
+  createBackup,
+  loadBackups,
+  getBackupInfos,
+  restoreFromBackup,
+  deleteBackup,
+  createSnapshot,
+  loadSnapshots,
+  restoreFromSnapshot,
+  detectConflicts,
+  resolveConflicts,
+  importDataFromFile,
+  exportAllData,
+  checkStorageHealth,
+  autoRecovery,
+  performMigrationIfNeeded,
+  getStorageConfig,
+  saveStorageConfig,
+  validateImportData,
 } from '../utils/storage';
 import {
   performTourAdaptation,
@@ -475,6 +503,23 @@ interface AppStore extends AppState {
   isMaterialComboFavorited: (comboId: string) => boolean;
   getFavoriteMaterialCombos: () => MaterialComboFavorite[];
   removeMaterialComboFavorite: (favoriteId: string) => void;
+
+  setStorageHealth: (health: StorageHealthStatus | null) => void;
+  setStorageMetadata: (metadata: StorageMetadata | null) => void;
+  setActiveStorageTab: (tab: 'management' | 'backups' | 'import' | 'health') => void;
+  refreshFromStorage: () => void;
+  refreshBackups: () => void;
+  refreshSnapshots: () => void;
+  createStorageBackup: (name: string, description?: string) => StorageBackup | null;
+  restoreStorageBackup: (backupId: string) => boolean;
+  deleteStorageBackup: (backupId: string) => boolean;
+  createStorageSnapshot: () => StorageSnapshot;
+  restoreStorageSnapshot: (snapshotId: string) => boolean;
+  importStorageData: (file: File, conflictStrategies?: Record<string, ConflictResolutionStrategy>) => Promise<ImportResult>;
+  exportStorageData: (name: string, scope?: 'all' | 'presets' | 'schemes' | 'projects' | 'templates') => void;
+  runStorageAutoRecovery: () => ReturnType<typeof autoRecovery>;
+  runStorageMigration: () => ReturnType<typeof performMigrationIfNeeded>;
+  getStorageConfigState: () => StorageConfig;
 }
 
 const getInitialState = (): AppState => {
@@ -497,6 +542,8 @@ const getInitialState = (): AppState => {
   const savedPresetGroups = loadPresetGroups();
   const savedLightingPresets = loadLightingPresets();
   const savedLightingHistory = loadLightingHistory();
+  const savedBackups = loadBackups();
+  const savedSnapshots = loadSnapshots();
 
   const schemes = savedSchemes.length > 0 ? savedSchemes : mockGallerySchemes;
   const projects = savedProjects.length > 0 ? savedProjects : mockCuratorProjects;
@@ -621,6 +668,11 @@ const getInitialState = (): AppState => {
     lightingValidationWarnings: [],
     materialValidationWarnings: [],
     materialComboFavorites: getMaterialComboFavorites(),
+    storageHealth: null,
+    storageMetadata: null,
+    backups: savedBackups,
+    snapshots: savedSnapshots,
+    activeStorageTab: 'management',
   };
 };
 
@@ -5072,5 +5124,109 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set({
       compareView: { ...DEFAULT_COMPARE_VIEW_STATE },
     });
+  },
+
+  setStorageHealth: (health) => {
+    set({ storageHealth: health });
+  },
+
+  setStorageMetadata: (metadata) => {
+    set({ storageMetadata: metadata });
+  },
+
+  setActiveStorageTab: (tab) => {
+    set({ activeStorageTab: tab });
+  },
+
+  refreshFromStorage: () => {
+    const state = get();
+    state.initializeFromStorage();
+    const health = checkStorageHealth();
+    set({ storageHealth: health });
+  },
+
+  refreshBackups: () => {
+    const backups = loadBackups();
+    set({ backups });
+  },
+
+  refreshSnapshots: () => {
+    const snapshots = loadSnapshots();
+    set({ snapshots });
+  },
+
+  createStorageBackup: (name, description) => {
+    const backup = createBackup(name, description);
+    if (backup) {
+      get().refreshBackups();
+    }
+    return backup;
+  },
+
+  restoreStorageBackup: (backupId) => {
+    const success = restoreFromBackup(backupId);
+    if (success) {
+      get().refreshFromStorage();
+    }
+    return success;
+  },
+
+  deleteStorageBackup: (backupId) => {
+    const success = deleteBackup(backupId);
+    if (success) {
+      get().refreshBackups();
+    }
+    return success;
+  },
+
+  createStorageSnapshot: () => {
+    const snapshot = createSnapshot();
+    get().refreshSnapshots();
+    return snapshot;
+  },
+
+  restoreStorageSnapshot: (snapshotId) => {
+    const success = restoreFromSnapshot(snapshotId);
+    if (success) {
+      get().refreshFromStorage();
+    }
+    return success;
+  },
+
+  importStorageData: async (file, conflictStrategies) => {
+    const result = await importDataFromFile(file, {
+      conflictStrategies,
+    });
+    if (result.success && result.conflicts.length === 0) {
+      get().refreshFromStorage();
+    }
+    return result;
+  },
+
+  exportStorageData: (name, scope = 'all') => {
+    const data = exportAllData(name, { scope });
+    console.log('Export data:', data);
+  },
+
+  runStorageAutoRecovery: () => {
+    const result = autoRecovery();
+    if (result.recovered) {
+      get().refreshFromStorage();
+    }
+    const health = checkStorageHealth();
+    set({ storageHealth: health });
+    return result;
+  },
+
+  runStorageMigration: () => {
+    const result = performMigrationIfNeeded();
+    if (result) {
+      get().refreshFromStorage();
+    }
+    return result;
+  },
+
+  getStorageConfigState: () => {
+    return getStorageConfig();
   },
 }));

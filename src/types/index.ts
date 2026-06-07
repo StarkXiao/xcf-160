@@ -1000,6 +1000,11 @@ export interface AppState {
   lightingValidationWarnings: LightingParameterWarning[];
   materialValidationWarnings: MaterialParameterWarning[];
   materialComboFavorites: MaterialComboFavorite[];
+  storageHealth: StorageHealthStatus | null;
+  storageMetadata: StorageMetadata | null;
+  backups: StorageBackup[];
+  snapshots: StorageSnapshot[];
+  activeStorageTab: 'management' | 'backups' | 'import' | 'health';
 }
 
 export const APPROVAL_STATUS_LABELS: Record<ApprovalStatus, string> = {

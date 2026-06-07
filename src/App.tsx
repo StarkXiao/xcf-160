@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Lightbulb,
@@ -18,8 +18,12 @@ import {
   Grid3X3,
   BookOpen,
   Building2,
+  HardDrive,
 } from 'lucide-react';
 import { useAppStore } from './store/useAppStore';
+import { ToastProvider, ToastContainer, useToast } from './components/Toast';
+import { initStorageSystem, checkStorageHealth, getStorageMetadata, loadBackups } from './utils/storage';
+import type { AutoRecoveryResult, DataMigrationResult } from './types';
 import { ArtworkList } from './components/ArtworkList/ArtworkList';
 import { GalleryPreview } from './components/GalleryPreview/GalleryPreview';
 import { GalleryWallPreview } from './components/GalleryPreview/GalleryWallPreview';
@@ -62,7 +66,7 @@ const artworkModeTabs: { id: PanelTab; label: string; icon: React.ReactNode }[] 
   { id: 'themeLibrary', label: '馆藏', icon: <BookOpen className="w-4 h-4" /> },
 ];
 
-export default function App() {
+function AppContent() {
   const {
     activePanel,
     setActivePanel,
@@ -75,22 +79,25 @@ export default function App() {
     currentProjectId,
     setCurrentProject,
     setCurrentScheme,
+    storageHealth,
+    storageMetadata,
+    setStorageHealth,
+    setStorageMetadata,
+    refreshFromStorage,
   } = useAppStore();
+  const { addToast } = useToast();
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [showCuratorHub, setShowCuratorHub] = useState(false);
   const [showModeDropdown, setShowModeDropdown] = useState(false);
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
   const [shareToken, setShareToken] = useState<string | null>(null);
+  const [showStorageStatus, setShowStorageStatus] = useState(false);
+  const storageInitRef = useRef(false);
 
   const currentScheme = gallerySchemes.find((s) => s.id === currentSchemeId);
   const currentProject = curatorProjects.find((p) => p.id === currentProjectId);
   const activeTabs = appMode === 'curator' ? tabs : artworkModeTabs;
-
-  const projectSchemes = useMemo(() => {
-    if (!currentProject) return [];
-    return gallerySchemes.filter((s) => currentProject.schemeIds.includes(s.id));
-  }, [currentProject, gallerySchemes]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -131,6 +138,92 @@ export default function App() {
       setShareToken(share);
     }
   }, []);
+
+  useEffect(() => {
+    if (storageInitRef.current) return;
+    storageInitRef.current = true;
+
+    const initializeStorage = async () => {
+      try {
+        const result = initStorageSystem();
+        setStorageHealth(result.health);
+        setStorageMetadata(getStorageMetadata());
+
+        const messages: string[] = [];
+
+        const backupCount = loadBackups().length;
+
+        if (result.health.isHealthy) {
+          messages.push('存储系统运行正常');
+        } else {
+          messages.push(`检测到 ${result.health.corruptedKeys.length} 个损坏项`);
+        }
+
+        if (result.migrationResult) {
+          const mr = result.migrationResult as DataMigrationResult;
+          if (mr.success && mr.stepsApplied > 0) {
+            messages.push(`数据已从 v${mr.fromVersion} 迁移到 v${mr.toVersion}`);
+            addToast('success', `数据迁移完成：v${mr.fromVersion} → v${mr.toVersion}`);
+          } else if (!mr.success) {
+            addToast('error', `数据迁移失败：${mr.errors[0] || '未知错误'}`);
+          }
+        }
+
+        if (result.recoveryResult) {
+          const rr = result.recoveryResult as AutoRecoveryResult;
+          if (rr.recovered && rr.recoverySource) {
+            messages.push(`已从 ${rr.recoverySource} 恢复数据`);
+            addToast('success', `数据已自动恢复（来源：${rr.recoverySource}）`);
+          } else if (!rr.recovered && rr.errors.length > 0) {
+            addToast('error', `自动恢复失败：${rr.errors[0]}`);
+          }
+        }
+
+        if (result.health.needsMigration) {
+          addToast('warning', '检测到数据版本更新，建议立即迁移');
+        }
+
+        if (backupCount > 0) {
+          messages.push(`${backupCount} 个备份可用`);
+        }
+
+        refreshFromStorage();
+
+        if (messages.length > 0) {
+          setTimeout(() => {
+            addToast('info', messages.join(' · '), 5000);
+          }, 1000);
+        }
+      } catch {
+        addToast('error', '存储系统初始化失败');
+      }
+    };
+
+    initializeStorage();
+  }, [addToast, refreshFromStorage, setStorageHealth, setStorageMetadata]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const health = checkStorageHealth();
+      setStorageHealth(health);
+      const metadata = getStorageMetadata();
+      setStorageMetadata(metadata);
+
+      if (!health.hasRecentBackup) {
+        addToast('warning', '已超过24小时未自动备份');
+      }
+    }, 5 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [setStorageHealth, setStorageMetadata, addToast]);
+
+  const getHealthColor = () => {
+    if (!storageHealth) return 'bg-gray-500';
+    if (storageHealth.isHealthy) return 'bg-green-500';
+    if (storageHealth.corruptedKeys.length > 0) return 'bg-red-500';
+    if (storageHealth.needsMigration) return 'bg-yellow-500';
+    return 'bg-blue-500';
+  };
 
   const renderPanel = () => {
     switch (activePanel) {
@@ -341,6 +434,96 @@ export default function App() {
             </AnimatePresence>
           </div>
 
+          <div className="relative">
+            <button
+              onClick={() => setShowStorageStatus(!showStorageStatus)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gallery-bg border border-gallery-border hover:border-gold/50 transition-colors text-xs"
+              title="存储系统状态"
+            >
+              <div className={`w-2 h-2 rounded-full ${getHealthColor()} ${storageHealth && !storageHealth.isHealthy ? 'animate-pulse' : ''}`} />
+              <HardDrive className="w-3.5 h-3.5 text-gold" />
+              <span className="hidden md:inline text-white/80">存储</span>
+              {storageMetadata && (
+                <span className="hidden lg:inline text-white/40">
+                  {Math.round(storageMetadata.dataSize / 1024)}KB
+                </span>
+              )}
+            </button>
+
+            <AnimatePresence>
+              {showStorageStatus && storageHealth && (
+                <motion.div
+                  initial={{ opacity: 0, y: -5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -5 }}
+                  className="absolute top-full right-0 mt-1 bg-gallery-surface border border-gallery-border rounded-lg overflow-hidden z-50 min-w-64 shadow-xl"
+                >
+                  <div className="px-3 py-2 border-b border-gallery-border">
+                    <p className="text-[10px] text-white/40 uppercase tracking-wider mb-1">存储系统状态</p>
+                  </div>
+                  <div className="p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-white/60">健康状态</span>
+                      <span className={`text-xs font-medium ${storageHealth.isHealthy ? 'text-green-400' : 'text-red-400'}`}>
+                        {storageHealth.isHealthy ? '正常' : '异常'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-white/60">数据项</span>
+                      <span className="text-xs text-white/80">{storageMetadata?.itemCount || 0} 项</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-white/60">数据大小</span>
+                      <span className="text-xs text-white/80">{Math.round((storageMetadata?.dataSize || 0) / 1024)} KB</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-white/60">Schema 版本</span>
+                      <span className="text-xs text-white/80">v{storageMetadata?.schemaVersion || 1}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-white/60">备份数量</span>
+                      <span className="text-xs text-white/80">{loadBackups().length} 个</span>
+                    </div>
+                    {storageHealth.corruptedKeys.length > 0 && (
+                      <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/30">
+                        <p className="text-xs text-red-400">
+                          ⚠️ {storageHealth.corruptedKeys.length} 个损坏项
+                        </p>
+                      </div>
+                    )}
+                    {storageHealth.needsMigration && (
+                      <div className="p-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+                        <p className="text-xs text-yellow-400">
+                          ⚠️ 需要数据迁移
+                        </p>
+                      </div>
+                    )}
+                    {storageMetadata?.lastBackupAt && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-white/60">最近备份</span>
+                        <span className="text-xs text-white/80">
+                          {new Date(storageMetadata.lastBackupAt).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="px-3 py-2 border-t border-gallery-border">
+                    <button
+                      onClick={() => {
+                        setActivePanel('storage');
+                        setShowStorageStatus(false);
+                      }}
+                      className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded bg-gold/10 text-gold text-xs hover:bg-gold/20 transition-colors"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      打开存储管理
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
           {compareList.length > 0 && (
             <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-gold/10 border border-gold/30">
               <GitCompare className="w-3.5 h-3.5 text-gold" />
@@ -435,5 +618,14 @@ export default function App() {
         </AnimatePresence>
       </div>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <ToastProvider>
+      <AppContent />
+      <ToastContainer />
+    </ToastProvider>
   );
 }
