@@ -2655,3 +2655,7 @@ export const MATERIAL_RECOMMENDATIONS: MaterialRecommendation[] = [
 ];
 
 export const MATERIAL_COMBO_FAVORITES_KEY = 'material_combo_favorites';
+
+export function formatMaterialDescription(material: MaterialConfig): string {
+  return `${FRAME_MATERIAL_LABELS[material.frameMaterial]} + ${WALL_MATERIAL_LABELS[material.wallMaterial]} | 反光${Math.round(material.reflectivity * 100)}% / 粗糙${Math.round(material.roughness * 100)}%`;
+}
