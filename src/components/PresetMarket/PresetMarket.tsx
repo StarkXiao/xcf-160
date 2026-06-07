@@ -86,11 +86,11 @@ export const PresetMarket: React.FC = () => {
     ];
   }, [presetMarketCategory]);
 
-  const handleToggleFavorite = (type: 'lighting' | 'material', id: string) => {
+  const handleToggleFavorite = (type: 'lighting' | 'material', id: string, name?: string) => {
     if (type === 'lighting') {
       toggleLightingTemplateFavorite(id);
     } else {
-      toggleMaterialComboFavorite(id);
+      toggleMaterialComboFavorite(id, name || '材质组合');
     }
   };
 
@@ -464,7 +464,7 @@ export const PresetMarket: React.FC = () => {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleToggleFavorite(type, data.id);
+                                handleToggleFavorite(type, data.id, data.name);
                               }}
                               className={`flex items-center gap-1 transition-colors ${
                                 isFav ? 'text-red-400' : 'hover:text-red-400'

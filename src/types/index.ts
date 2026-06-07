@@ -998,6 +998,8 @@ export interface AppState {
   lightingPresets: LightingPreset[];
   selectedLightingPresetId: string | null;
   lightingValidationWarnings: LightingParameterWarning[];
+  materialValidationWarnings: MaterialParameterWarning[];
+  materialComboFavorites: MaterialComboFavorite[];
 }
 
 export const APPROVAL_STATUS_LABELS: Record<ApprovalStatus, string> = {
@@ -2291,3 +2293,365 @@ export const DEFAULT_LIGHTING_PRESETS: Omit<LightingPreset, 'id' | 'createdAt' |
     isFavorite: false,
   },
 ];
+
+export interface MaterialDescription {
+  material: FrameMaterial | WallMaterial;
+  name: string;
+  description: string;
+  features: string[];
+  suitableFor: string[];
+  notSuitableFor: string[];
+  durability: number;
+  costLevel: 'economy' | 'standard' | 'premium' | 'luxury';
+}
+
+export interface MaterialEffectPreview {
+  shadowIntensity: number;
+  reflectionIntensity: number;
+  glowIntensity: number;
+  contrastLevel: number;
+  colorSaturation: number;
+  visualTemperature: 'cool' | 'neutral' | 'warm';
+  atmosphere: string;
+  recommendedLighting: Partial<LightingConfig>;
+}
+
+export interface MaterialParameterWarning {
+  param: keyof MaterialConfig;
+  message: string;
+  severity: 'info' | 'warning' | 'error';
+  suggestion?: Partial<MaterialConfig>;
+  relatedArtworkMedium?: string[];
+}
+
+export interface MaterialValidationResult {
+  isValid: boolean;
+  warnings: MaterialParameterWarning[];
+  autoAdjusted?: Partial<MaterialConfig>;
+}
+
+export interface MaterialParameterConstraint {
+  reflectivityRange: { min: number; max: number };
+  roughnessRange: { min: number; max: number };
+  recommendedReflectivity: { min: number; max: number };
+  recommendedRoughness: { min: number; max: number };
+  linkedParameters: Array<{
+    source: keyof MaterialConfig;
+    target: keyof MaterialConfig;
+    formula: (sourceValue: number) => number;
+    description: string;
+  }>;
+}
+
+export interface MaterialRecommendation {
+  id: string;
+  name: string;
+  description: string;
+  material: Partial<MaterialConfig>;
+  matchReason: string;
+  confidence: number;
+  tags: string[];
+  artworkMedium?: string;
+}
+
+export interface MaterialComboFavorite {
+  id: string;
+  comboId: string;
+  name: string;
+  note?: string;
+  createdAt: number;
+  useCount: number;
+  lastUsedAt?: number;
+}
+
+export const MATERIAL_PARAMETER_CONSTRAINTS: Record<FrameMaterial, MaterialParameterConstraint> = {
+  wood: {
+    reflectivityRange: { min: 0, max: 0.6 },
+    roughnessRange: { min: 0.3, max: 0.9 },
+    recommendedReflectivity: { min: 0.15, max: 0.4 },
+    recommendedRoughness: { min: 0.5, max: 0.8 },
+    linkedParameters: [
+      {
+        source: 'reflectivity',
+        target: 'roughness',
+        formula: (reflectivity) => Math.max(0.3, 1 - reflectivity * 1.2),
+        description: '木质材质反光度越高，建议粗糙度越低',
+      },
+    ],
+  },
+  metal: {
+    reflectivityRange: { min: 0.2, max: 0.8 },
+    roughnessRange: { min: 0.1, max: 0.7 },
+    recommendedReflectivity: { min: 0.3, max: 0.6 },
+    recommendedRoughness: { min: 0.2, max: 0.5 },
+    linkedParameters: [
+      {
+        source: 'reflectivity',
+        target: 'roughness',
+        formula: (reflectivity) => Math.max(0.1, 1 - reflectivity * 0.9),
+        description: '金属材质反光度越高，建议粗糙度越低',
+      },
+    ],
+  },
+  gold: {
+    reflectivityRange: { min: 0.3, max: 0.9 },
+    roughnessRange: { min: 0.05, max: 0.6 },
+    recommendedReflectivity: { min: 0.4, max: 0.7 },
+    recommendedRoughness: { min: 0.1, max: 0.4 },
+    linkedParameters: [
+      {
+        source: 'reflectivity',
+        target: 'roughness',
+        formula: (reflectivity) => Math.max(0.05, 1 - reflectivity * 1.1),
+        description: '金色材质反光度越高，建议粗糙度越低',
+      },
+    ],
+  },
+  silver: {
+    reflectivityRange: { min: 0.3, max: 0.9 },
+    roughnessRange: { min: 0.05, max: 0.6 },
+    recommendedReflectivity: { min: 0.4, max: 0.7 },
+    recommendedRoughness: { min: 0.1, max: 0.4 },
+    linkedParameters: [
+      {
+        source: 'reflectivity',
+        target: 'roughness',
+        formula: (reflectivity) => Math.max(0.05, 1 - reflectivity * 1.1),
+        description: '银色材质反光度越高，建议粗糙度越低',
+      },
+    ],
+  },
+  none: {
+    reflectivityRange: { min: 0, max: 0.5 },
+    roughnessRange: { min: 0.2, max: 0.9 },
+    recommendedReflectivity: { min: 0.05, max: 0.25 },
+    recommendedRoughness: { min: 0.6, max: 0.85 },
+    linkedParameters: [],
+  },
+};
+
+export const WALL_MATERIAL_PARAMETER_CONSTRAINTS: Record<WallMaterial, MaterialParameterConstraint> = {
+  matte: {
+    reflectivityRange: { min: 0, max: 0.3 },
+    roughnessRange: { min: 0.5, max: 1 },
+    recommendedReflectivity: { min: 0.05, max: 0.2 },
+    recommendedRoughness: { min: 0.7, max: 0.95 },
+    linkedParameters: [
+      {
+        source: 'reflectivity',
+        target: 'roughness',
+        formula: (reflectivity) => Math.max(0.5, 1 - reflectivity * 1.5),
+        description: '哑光墙面反光度越高，建议粗糙度越低',
+      },
+    ],
+  },
+  satin: {
+    reflectivityRange: { min: 0.1, max: 0.5 },
+    roughnessRange: { min: 0.3, max: 0.8 },
+    recommendedReflectivity: { min: 0.15, max: 0.35 },
+    recommendedRoughness: { min: 0.45, max: 0.7 },
+    linkedParameters: [
+      {
+        source: 'reflectivity',
+        target: 'roughness',
+        formula: (reflectivity) => Math.max(0.3, 1 - reflectivity * 1.3),
+        description: '丝光墙面反光度越高，建议粗糙度越低',
+      },
+    ],
+  },
+  glossy: {
+    reflectivityRange: { min: 0.3, max: 0.9 },
+    roughnessRange: { min: 0, max: 0.5 },
+    recommendedReflectivity: { min: 0.4, max: 0.7 },
+    recommendedRoughness: { min: 0.1, max: 0.35 },
+    linkedParameters: [
+      {
+        source: 'reflectivity',
+        target: 'roughness',
+        formula: (reflectivity) => Math.max(0, 1 - reflectivity * 1.1),
+        description: '高光墙面反光度越高，建议粗糙度越低',
+      },
+    ],
+  },
+  concrete: {
+    reflectivityRange: { min: 0, max: 0.4 },
+    roughnessRange: { min: 0.4, max: 1 },
+    recommendedReflectivity: { min: 0.1, max: 0.25 },
+    recommendedRoughness: { min: 0.6, max: 0.9 },
+    linkedParameters: [
+      {
+        source: 'reflectivity',
+        target: 'roughness',
+        formula: (reflectivity) => Math.max(0.4, 1 - reflectivity * 1.4),
+        description: '水泥墙面反光度越高，建议粗糙度越低',
+      },
+    ],
+  },
+};
+
+export const FRAME_MATERIAL_DESCRIPTIONS: Record<FrameMaterial, MaterialDescription> = {
+  wood: {
+    material: 'wood',
+    name: '木质画框',
+    description: '天然木质纹理，温暖典雅，适合传统和古典艺术作品。实木材质具有良好的质感和耐久性，能为作品增添自然气息。',
+    features: ['天然纹理', '温暖质感', '环保材质', '可定制雕刻'],
+    suitableFor: ['油画', '水彩', '古典绘画', '传统摄影'],
+    notSuitableFor: ['极简主义', '工业风格', '新媒体艺术'],
+    durability: 4,
+    costLevel: 'standard',
+  },
+  metal: {
+    material: 'metal',
+    name: '金属画框',
+    description: '现代简约风格，线条简洁利落，适合当代艺术和摄影作品。金属材质坚固耐用，具有工业感和现代感。',
+    features: ['坚固耐用', '现代简约', '防腐蚀', '轻盈质感'],
+    suitableFor: ['摄影', '现代艺术', '极简主义', '黑白作品'],
+    notSuitableFor: ['古典油画', '传统水彩', '乡村风格'],
+    durability: 5,
+    costLevel: 'standard',
+  },
+  gold: {
+    material: 'gold',
+    name: '金色画框',
+    description: '华丽典雅，富有收藏感，适合经典名作和贵重艺术品。金色能够提升作品的价值感和庄重感。',
+    features: ['华丽典雅', '收藏级品质', '提升价值感', '复古风格'],
+    suitableFor: ['古典油画', '经典名作', '肖像画', '贵重艺术品'],
+    notSuitableFor: ['现代极简', '街头艺术', '工业风格'],
+    durability: 4,
+    costLevel: 'premium',
+  },
+  silver: {
+    material: 'silver',
+    name: '银色画框',
+    description: '冷调现代感，时尚精致，适合黑白摄影和当代艺术。银色能够营造冷静、专业的展示氛围。',
+    features: ['时尚精致', '冷调现代', '专业感', '百搭风格'],
+    suitableFor: ['黑白摄影', '当代艺术', '时尚作品', '设计类作品'],
+    notSuitableFor: ['暖调古典', '传统油画', '乡村风格'],
+    durability: 4,
+    costLevel: 'premium',
+  },
+  none: {
+    material: 'none',
+    name: '无框展示',
+    description: '最大化展示作品本身，让观众专注于艺术内容。适合现代艺术、装置艺术和希望突出作品本身的展示方式。',
+    features: ['极简风格', '突出作品', '现代感强', '节省空间'],
+    suitableFor: ['现代艺术', '装置艺术', '大尺幅作品', '极简主义'],
+    notSuitableFor: ['古典作品', '需要保护的纸本作品', '贵重油画'],
+    durability: 3,
+    costLevel: 'economy',
+  },
+};
+
+export const WALL_MATERIAL_DESCRIPTIONS: Record<WallMaterial, MaterialDescription> = {
+  matte: {
+    material: 'matte',
+    name: '哑光墙面',
+    description: '低反光度，柔和不刺眼，能够很好地突出作品本身。是美术馆和画廊最常用的墙面处理方式。',
+    features: ['低反光', '柔和护眼', '突出作品', '专业标准'],
+    suitableFor: ['油画', '摄影', '水彩', '大部分艺术作品'],
+    notSuitableFor: ['需要强反光效果的装置', '夜店风格展示'],
+    durability: 4,
+    costLevel: 'standard',
+  },
+  satin: {
+    material: 'satin',
+    name: '丝光墙面',
+    description: '介于哑光和高光之间，既有一定的质感又不会过度反光。适合需要一定氛围感但又要突出作品的场景。',
+    features: ['质感细腻', '适度反光', '易于清洁', '温馨氛围'],
+    suitableFor: ['现代艺术', '设计作品', '商业空间', '摄影展'],
+    notSuitableFor: ['需要绝对无反光的专业展览'],
+    durability: 4,
+    costLevel: 'standard',
+  },
+  glossy: {
+    material: 'glossy',
+    name: '高光墙面',
+    description: '高反光度，能够营造奢华感和现代感。适合商业空间和需要特殊视觉效果的展览。',
+    features: ['高反光', '奢华感', '现代时尚', '视觉冲击力'],
+    suitableFor: ['商业展览', '时尚品牌', '装置艺术', '现代设计'],
+    notSuitableFor: ['传统艺术展览', '需要长时间观赏的作品', '纸面作品'],
+    durability: 5,
+    costLevel: 'premium',
+  },
+  concrete: {
+    material: 'concrete',
+    name: '水泥墙面',
+    description: '工业风格，粗糙质感，适合当代艺术和工业风展览。保留原始建筑质感，营造独特的艺术氛围。',
+    features: ['工业风格', '原始质感', '独特氛围', '耐用性强'],
+    suitableFor: ['当代艺术', '工业风格', '街头艺术', '装置艺术'],
+    notSuitableFor: ['古典艺术', '精致小幅作品', '传统画廊'],
+    durability: 5,
+    costLevel: 'premium',
+  },
+};
+
+export const MATERIAL_RECOMMENDATIONS: MaterialRecommendation[] = [
+  {
+    id: 'mat-rec-oil-painting',
+    name: '油画经典配置',
+    description: '金色画框配哑光墙，突出油画厚重质感',
+    material: { frameMaterial: 'gold', wallMaterial: 'matte', reflectivity: 0.25, roughness: 0.75 },
+    matchReason: '油画作品适合经典金色画框和哑光墙面，能够很好地展现颜料的层次感',
+    confidence: 0.92,
+    tags: ['油画', '经典', '金色'],
+    artworkMedium: '油画',
+  },
+  {
+    id: 'mat-rec-photography',
+    name: '摄影专业配置',
+    description: '金属画框配丝光墙，现代专业的摄影展示',
+    material: { frameMaterial: 'metal', wallMaterial: 'satin', reflectivity: 0.3, roughness: 0.55 },
+    matchReason: '摄影作品适合现代金属画框和丝光墙面，能够准确还原色彩细节',
+    confidence: 0.88,
+    tags: ['摄影', '现代', '专业'],
+    artworkMedium: '摄影',
+  },
+  {
+    id: 'mat-rec-watercolor',
+    name: '水彩雅致配置',
+    description: '木质画框配哑光墙，展现水彩通透感',
+    material: { frameMaterial: 'wood', wallMaterial: 'matte', reflectivity: 0.2, roughness: 0.8 },
+    matchReason: '水彩作品需要柔和的环境来展现其通透和淡雅的特质',
+    confidence: 0.85,
+    tags: ['水彩', '雅致', '木质'],
+    artworkMedium: '水彩',
+  },
+  {
+    id: 'mat-rec-minimalist',
+    name: '极简主义配置',
+    description: '无框配高光墙，极致简约的现代展示',
+    material: { frameMaterial: 'none', wallMaterial: 'glossy', reflectivity: 0.5, roughness: 0.3 },
+    matchReason: '极简主义作品适合无框展示，让作品本身成为焦点',
+    confidence: 0.9,
+    tags: ['极简', '现代', '无框'],
+  },
+  {
+    id: 'mat-rec-industrial',
+    name: '工业风格配置',
+    description: '金属画框配水泥墙，粗犷工业风',
+    material: { frameMaterial: 'metal', wallMaterial: 'concrete', reflectivity: 0.35, roughness: 0.8 },
+    matchReason: '工业风格作品需要原始质感的墙面来呼应其美学特质',
+    confidence: 0.82,
+    tags: ['工业', '金属', '水泥'],
+  },
+  {
+    id: 'mat-rec-luxury',
+    name: '奢华典藏配置',
+    description: '金色画框配高光墙，奢华典藏级展示',
+    material: { frameMaterial: 'gold', wallMaterial: 'glossy', reflectivity: 0.6, roughness: 0.4 },
+    matchReason: '贵重艺术品和典藏级作品需要奢华的展示环境来凸显其价值',
+    confidence: 0.87,
+    tags: ['奢华', '典藏', '金色'],
+  },
+  {
+    id: 'mat-rec-contemporary',
+    name: '当代艺术配置',
+    description: '银色画框配丝光墙，时尚当代感',
+    material: { frameMaterial: 'silver', wallMaterial: 'satin', reflectivity: 0.35, roughness: 0.5 },
+    matchReason: '当代艺术作品适合冷调银色和丝光墙面，营造时尚现代的氛围',
+    confidence: 0.84,
+    tags: ['当代', '时尚', '银色'],
+  },
+];
+
+export const MATERIAL_COMBO_FAVORITES_KEY = 'material_combo_favorites';

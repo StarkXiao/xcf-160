@@ -77,6 +77,11 @@ import type {
   LightingValidationResult,
   LightingRecommendation,
   LightingParameterConstraint,
+  MaterialParameterWarning,
+  MaterialValidationResult,
+  MaterialRecommendation,
+  MaterialEffectPreview,
+  MaterialComboFavorite,
 } from '../types';
 import {
   DEFAULT_LIGHTING,
@@ -183,6 +188,18 @@ import {
 import {
   getRecommendationsForArtwork,
   getLightingRecommendations as getLightingRecommendationsUtil,
+  validateMaterialConfig,
+  calculateMaterialEffectPreview,
+  getMaterialRecommendations as getMaterialRecommendationsUtil,
+  getMaterialDescription,
+  getMaterialParameterLimits,
+  clampMaterialParameters,
+  addMaterialComboToFavorites,
+  removeMaterialComboFromFavorites,
+  isMaterialComboFavorited,
+  incrementMaterialComboFavoriteUse,
+  getMaterialComboFavorites,
+  formatMaterialDescription,
 } from '../utils/lighting';
 
 interface AppStore extends AppState {
@@ -375,7 +392,6 @@ interface AppStore extends AppState {
   getQuotationSummary: (quotation: ExhibitionQuotation) => QuotationSummary;
   exportQuotation: (quotationId: string) => void;
   toggleLightingTemplateFavorite: (templateId: string) => void;
-  toggleMaterialComboFavorite: (comboId: string) => void;
   duplicateLightingTemplate: (templateId: string, newName?: string) => LightingTemplate;
   duplicateMaterialCombo: (comboId: string, newName?: string) => MaterialCombo;
   createPresetGroup: (name: string, color: string, description?: string) => PresetGroup;
@@ -450,6 +466,15 @@ interface AppStore extends AppState {
   jumpToLightingHistory: (index: number) => void;
   validateLightingConfig: (lighting: Partial<LightingConfig>) => LightingValidationResult;
   setLightingWithHistory: (lighting: Partial<LightingConfig>, description?: string) => void;
+  validateMaterialConfig: (material: Partial<MaterialConfig>) => MaterialValidationResult;
+  getMaterialEffectPreview: () => MaterialEffectPreview;
+  getMaterialRecommendations: (artworkMedium?: string) => MaterialRecommendation[];
+  getCurrentMaterialDescription: () => ReturnType<typeof getMaterialDescription>;
+  applyMaterialRecommendation: (recommendation: MaterialRecommendation) => void;
+  toggleMaterialComboFavorite: (comboId: string, name: string) => void;
+  isMaterialComboFavorited: (comboId: string) => boolean;
+  getFavoriteMaterialCombos: () => MaterialComboFavorite[];
+  removeMaterialComboFavorite: (favoriteId: string) => void;
 }
 
 const getInitialState = (): AppState => {
@@ -594,6 +619,8 @@ const getInitialState = (): AppState => {
     lightingPresets,
     selectedLightingPresetId: null,
     lightingValidationWarnings: [],
+    materialValidationWarnings: [],
+    materialComboFavorites: getMaterialComboFavorites(),
   };
 };
 
@@ -953,10 +980,85 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   setMaterial: (material) => {
     set((state) => {
-      const newMaterial = { ...state.material, ...material };
+      const validation = validateMaterialConfig(material, state.material);
+      let newMaterial = { ...state.material, ...material };
+
+      if (validation.autoAdjusted) {
+        newMaterial = { ...newMaterial, ...validation.autoAdjusted };
+      }
+
+      const clamped = clampMaterialParameters(
+        newMaterial,
+        newMaterial.frameMaterial,
+        newMaterial.wallMaterial
+      );
+      newMaterial = { ...newMaterial, ...clamped };
+
       saveLastMaterial(newMaterial);
-      return { material: newMaterial };
+      return {
+        material: newMaterial,
+        materialValidationWarnings: validation.warnings,
+      };
     });
+  },
+
+  validateMaterialConfig: (material) => {
+    const state = get();
+    return validateMaterialConfig(material, state.material);
+  },
+
+  getMaterialEffectPreview: () => {
+    const state = get();
+    return calculateMaterialEffectPreview(state.material, state.lighting);
+  },
+
+  getMaterialRecommendations: (artworkMedium) => {
+    const state = get();
+    return getMaterialRecommendationsUtil(artworkMedium, state.material);
+  },
+
+  getCurrentMaterialDescription: () => {
+    const state = get();
+    return getMaterialDescription(state.material.frameMaterial, state.material.wallMaterial);
+  },
+
+  applyMaterialRecommendation: (recommendation) => {
+    get().setMaterial(recommendation.material);
+  },
+
+  toggleMaterialComboFavorite: (comboId, name) => {
+    const state = get();
+    const isFavorited = state.materialComboFavorites.some((f) => f.comboId === comboId);
+
+    if (isFavorited) {
+      const favorite = state.materialComboFavorites.find((f) => f.comboId === comboId);
+      if (favorite) {
+        removeMaterialComboFromFavorites(favorite.id);
+      }
+      set({
+        materialComboFavorites: state.materialComboFavorites.filter((f) => f.comboId !== comboId),
+      });
+    } else {
+      const newFavorite = addMaterialComboToFavorites(comboId, name);
+      set({
+        materialComboFavorites: [...state.materialComboFavorites, newFavorite],
+      });
+    }
+  },
+
+  isMaterialComboFavorited: (comboId) => {
+    return isMaterialComboFavorited(comboId);
+  },
+
+  getFavoriteMaterialCombos: () => {
+    return getMaterialComboFavorites();
+  },
+
+  removeMaterialComboFavorite: (favoriteId) => {
+    removeMaterialComboFromFavorites(favoriteId);
+    set((state) => ({
+      materialComboFavorites: state.materialComboFavorites.filter((f) => f.id !== favoriteId),
+    }));
   },
 
   setActivePanel: (panel) => set({ activePanel: panel }),
@@ -3700,6 +3802,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     if (!combo) return;
     setMaterial(combo.material);
     updateMaterialCombo(id, { useCount: combo.useCount + 1 });
+    incrementMaterialComboFavoriteUse(id);
   },
 
   applyMaterialComboToSelectedWallArtworks: (comboId) => {
@@ -4432,17 +4535,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
         favoriteLightingTemplateIds: isFavorite
           ? state.favoriteLightingTemplateIds.filter((id) => id !== templateId)
           : [...state.favoriteLightingTemplateIds, templateId],
-      };
-    });
-  },
-
-  toggleMaterialComboFavorite: (comboId) => {
-    set((state) => {
-      const isFavorite = state.favoriteMaterialComboIds.includes(comboId);
-      return {
-        favoriteMaterialComboIds: isFavorite
-          ? state.favoriteMaterialComboIds.filter((id) => id !== comboId)
-          : [...state.favoriteMaterialComboIds, comboId],
       };
     });
   },
