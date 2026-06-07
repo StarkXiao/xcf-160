@@ -28,6 +28,7 @@ import {
   Layers,
   FileText,
   Camera,
+  CheckCircle2,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import {
@@ -38,6 +39,7 @@ import type {
   StorageConflict,
   ConflictResolutionStrategy,
   ImportValidationResult,
+  StorageOperationType,
 } from '../../types';
 
 type StorageTab = 'management' | 'backups' | 'import' | 'health';
@@ -55,6 +57,19 @@ const STRATEGY_LABELS: Record<ConflictResolutionStrategy, string> = {
   merge: '合并数据',
   renameImported: '重命名导入',
   skip: '跳过',
+};
+
+const OPERATION_TYPE_LABELS: Record<StorageOperationType, string> = {
+  createBackup: '创建备份',
+  restoreBackup: '恢复备份',
+  deleteBackup: '删除备份',
+  createSnapshot: '创建快照',
+  restoreSnapshot: '恢复快照',
+  importData: '导入数据',
+  exportData: '导出数据',
+  autoRecovery: '自动恢复',
+  migration: '数据迁移',
+  healthCheck: '健康检查',
 };
 
 const formatSize = (bytes: number): string => {
@@ -81,8 +96,6 @@ export const StoragePanel: React.FC = () => {
     snapshots,
     activeStorageTab,
     setActiveStorageTab,
-    refreshBackups,
-    refreshSnapshots,
     refreshFromStorage,
     createStorageBackup,
     restoreStorageBackup,
@@ -93,6 +106,8 @@ export const StoragePanel: React.FC = () => {
     exportStorageData,
     runStorageAutoRecovery,
     runStorageMigration,
+    storageOperationResult,
+    clearStorageOperationResult,
     presets,
     gallerySchemes,
     curatorProjects,
@@ -118,33 +133,40 @@ export const StoragePanel: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [showOperationResult, setShowOperationResult] = useState(false);
+
   useEffect(() => {
-    refreshBackups();
-    refreshSnapshots();
-  }, [refreshBackups, refreshSnapshots]);
+    if (storageOperationResult) {
+      setShowOperationResult(true);
+      const timer = setTimeout(() => {
+        setShowOperationResult(false);
+        clearStorageOperationResult();
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [storageOperationResult, clearStorageOperationResult]);
+
+  useEffect(() => {
+    refreshFromStorage();
+  }, [refreshFromStorage]);
 
   const handleCreateBackup = () => {
     if (!backupName.trim()) return;
-    const result = createStorageBackup(backupName.trim(), backupDescription.trim() || undefined);
-    if (result) {
-      console.log('备份创建成功:', result.name);
-    }
+    createStorageBackup(backupName.trim(), backupDescription.trim() || undefined);
     setBackupName('');
     setBackupDescription('');
     setShowCreateBackupDialog(false);
   };
 
   const handleRestoreBackup = (backupId: string) => {
-    const success = restoreStorageBackup(backupId);
-    console.log(success ? '备份恢复成功' : '备份恢复失败');
+    restoreStorageBackup(backupId);
     setShowRestoreConfirmDialog(null);
   };
 
   const handleDeleteBackup = (backupId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (confirm('确定要删除这个备份吗？')) {
-      const success = deleteStorageBackup(backupId);
-      console.log(success ? '备份删除成功' : '备份删除失败');
+      deleteStorageBackup(backupId);
     }
   };
 
@@ -154,44 +176,34 @@ export const StoragePanel: React.FC = () => {
   };
 
   const handleCreateSnapshot = () => {
-    const snapshot = createStorageSnapshot();
-    console.log('快照创建成功:', snapshot.id);
+    createStorageSnapshot();
   };
 
   const handleRestoreSnapshot = (snapshotId: string) => {
     if (confirm('确定要恢复到此快照吗？这将覆盖当前所有数据。')) {
-      const success = restoreStorageSnapshot(snapshotId);
-      console.log(success ? '快照恢复成功' : '快照恢复失败');
+      restoreStorageSnapshot(snapshotId);
     }
   };
 
   const handleExportAll = () => {
     const name = `all_data_${Date.now()}`;
     exportStorageData(name);
-    console.log('全部数据已导出');
   };
 
   const handleRunMigration = () => {
-    const result = runStorageMigration();
-    if (result) {
-      console.log('数据迁移完成:', result);
-    } else {
-      console.log('无需迁移，数据已是最新版本');
-    }
+    runStorageMigration();
   };
 
   const handleRunAutoRecovery = () => {
     setIsRecovering(true);
     setTimeout(() => {
-      const result = runStorageAutoRecovery();
-      console.log('自动恢复完成:', result);
+      runStorageAutoRecovery();
       setIsRecovering(false);
     }, 1000);
   };
 
   const handleFileSelect = useCallback((file: File) => {
     if (!file.name.endsWith('.json')) {
-      console.log('请选择 JSON 文件');
       return;
     }
     setImportFile(file);
@@ -206,9 +218,14 @@ export const StoragePanel: React.FC = () => {
         const validation = validateImportData(data);
         setImportValidation(validation);
         setConflicts(validation.conflicts);
-        console.log('导入校验完成:', validation);
       } catch {
-        console.log('文件解析失败');
+        setImportValidation({
+          valid: false,
+          errors: [{ field: 'file', message: '文件解析失败', severity: 'error' }],
+          warnings: [],
+          conflicts: [],
+          stats: { totalItems: 0, presets: 0, schemes: 0, projects: 0, templates: 0 },
+        });
       }
     };
     reader.readAsText(file);
@@ -248,15 +265,13 @@ export const StoragePanel: React.FC = () => {
     if (!importFile) return;
     setIsImporting(true);
 
-    const result = await importStorageData(importFile, conflictStrategies);
-    console.log('导入结果:', result);
+    await importStorageData(importFile, conflictStrategies);
 
     setIsImporting(false);
     setImportFile(null);
     setImportValidation(null);
     setConflicts([]);
     setConflictStrategies({});
-    refreshFromStorage();
   };
 
   const handleCheckHealth = () => {
@@ -264,7 +279,6 @@ export const StoragePanel: React.FC = () => {
     setTimeout(() => {
       refreshFromStorage();
       setIsCheckingHealth(false);
-      console.log('健康检查完成');
     }, 1000);
   };
 
@@ -413,6 +427,47 @@ export const StoragePanel: React.FC = () => {
           </span>
         )}
       </div>
+
+      <AnimatePresence>
+        {showOperationResult && storageOperationResult && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className={`mb-4 p-3 rounded-lg flex items-center gap-3 ${
+              storageOperationResult.success
+                ? 'bg-green-500/10 border border-green-500/30'
+                : 'bg-red-500/10 border border-red-500/30'
+            }`}
+          >
+            {storageOperationResult.success ? (
+              <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0" />
+            ) : (
+              <XCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+            )}
+            <div className="flex-1 min-w-0">
+              <p className={`text-sm font-medium ${
+                storageOperationResult.success ? 'text-green-400' : 'text-red-400'
+              }`}>
+                {OPERATION_TYPE_LABELS[storageOperationResult.type]}
+                {storageOperationResult.success ? '成功' : '失败'}
+              </p>
+              <p className="text-xs text-white/60 mt-0.5">
+                {storageOperationResult.message}
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setShowOperationResult(false);
+                clearStorageOperationResult();
+              }}
+              className="text-white/40 hover:text-white transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="flex gap-1 mb-4 p-1 bg-gallery-bg rounded-lg">
         {(Object.keys(TAB_CONFIG) as StorageTab[]).map((tab) => {
@@ -611,7 +666,7 @@ export const StoragePanel: React.FC = () => {
                 新建备份
               </button>
               <button
-                onClick={refreshBackups}
+                onClick={refreshFromStorage}
                 className="btn-secondary px-3"
                 title="刷新列表"
               >

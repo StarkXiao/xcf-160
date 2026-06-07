@@ -92,6 +92,8 @@ import type {
   ImportResult,
   StorageConfig,
   StorageSnapshot,
+  StorageOperationResult,
+  StorageOperationType,
 } from '../types';
 import {
   DEFAULT_LIGHTING,
@@ -208,6 +210,7 @@ import {
   getStorageConfig,
   saveStorageConfig,
   validateImportData,
+  getStorageMetadata,
 } from '../utils/storage';
 import {
   performTourAdaptation,
@@ -507,6 +510,9 @@ interface AppStore extends AppState {
   setStorageHealth: (health: StorageHealthStatus | null) => void;
   setStorageMetadata: (metadata: StorageMetadata | null) => void;
   setActiveStorageTab: (tab: 'management' | 'backups' | 'import' | 'health') => void;
+  refreshStorageState: () => void;
+  setStorageOperationResult: (result: StorageOperationResult | null) => void;
+  clearStorageOperationResult: () => void;
   refreshFromStorage: () => void;
   refreshBackups: () => void;
   refreshSnapshots: () => void;
@@ -673,6 +679,7 @@ const getInitialState = (): AppState => {
     backups: savedBackups,
     snapshots: savedSnapshots,
     activeStorageTab: 'management',
+    storageOperationResult: null,
   };
 };
 
@@ -5138,11 +5145,25 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set({ activeStorageTab: tab });
   },
 
+  refreshStorageState: () => {
+    const health = checkStorageHealth();
+    const metadata = getStorageMetadata();
+    const backups = loadBackups();
+    const snapshots = loadSnapshots();
+    set({
+      storageHealth: health,
+      storageMetadata: metadata,
+      backups,
+      snapshots,
+    });
+  },
+
   refreshFromStorage: () => {
     const state = get();
     state.initializeFromStorage();
     const health = checkStorageHealth();
     set({ storageHealth: health });
+    get().refreshStorageState();
   },
 
   refreshBackups: () => {
@@ -5156,51 +5177,219 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   createStorageBackup: (name, description) => {
-    const backup = createBackup(name, description);
-    if (backup) {
-      get().refreshBackups();
+    try {
+      const backup = createBackup(name, description);
+      if (backup) {
+        get().refreshStorageState();
+        get().setStorageOperationResult({
+          type: 'createBackup',
+          success: true,
+          message: '备份创建成功',
+          details: { backupId: backup.id, name: backup.name },
+          timestamp: Date.now(),
+        });
+      } else {
+        get().setStorageOperationResult({
+          type: 'createBackup',
+          success: false,
+          message: '备份创建失败',
+          timestamp: Date.now(),
+        });
+      }
+      return backup;
+    } catch (error) {
+      get().setStorageOperationResult({
+        type: 'createBackup',
+        success: false,
+        message: `备份创建失败: ${error instanceof Error ? error.message : '未知错误'}`,
+        timestamp: Date.now(),
+      });
+      return null;
     }
-    return backup;
   },
 
   restoreStorageBackup: (backupId) => {
-    const success = restoreFromBackup(backupId);
-    if (success) {
-      get().refreshFromStorage();
+    try {
+      const success = restoreFromBackup(backupId);
+      if (success) {
+        get().refreshFromStorage();
+        get().refreshStorageState();
+        get().setStorageOperationResult({
+          type: 'restoreBackup',
+          success: true,
+          message: '备份恢复成功',
+          details: { backupId },
+          timestamp: Date.now(),
+        });
+      } else {
+        get().setStorageOperationResult({
+          type: 'restoreBackup',
+          success: false,
+          message: '备份恢复失败',
+          details: { backupId },
+          timestamp: Date.now(),
+        });
+      }
+      return success;
+    } catch (error) {
+      get().setStorageOperationResult({
+        type: 'restoreBackup',
+        success: false,
+        message: `备份恢复失败: ${error instanceof Error ? error.message : '未知错误'}`,
+        details: { backupId },
+        timestamp: Date.now(),
+      });
+      return false;
     }
-    return success;
   },
 
   deleteStorageBackup: (backupId) => {
-    const success = deleteBackup(backupId);
-    if (success) {
-      get().refreshBackups();
+    try {
+      const success = deleteBackup(backupId);
+      if (success) {
+        get().refreshStorageState();
+        get().setStorageOperationResult({
+          type: 'deleteBackup',
+          success: true,
+          message: '备份删除成功',
+          details: { backupId },
+          timestamp: Date.now(),
+        });
+      } else {
+        get().setStorageOperationResult({
+          type: 'deleteBackup',
+          success: false,
+          message: '备份删除失败',
+          details: { backupId },
+          timestamp: Date.now(),
+        });
+      }
+      return success;
+    } catch (error) {
+      get().setStorageOperationResult({
+        type: 'deleteBackup',
+        success: false,
+        message: `备份删除失败: ${error instanceof Error ? error.message : '未知错误'}`,
+        details: { backupId },
+        timestamp: Date.now(),
+      });
+      return false;
     }
-    return success;
   },
 
   createStorageSnapshot: () => {
-    const snapshot = createSnapshot();
-    get().refreshSnapshots();
-    return snapshot;
+    try {
+      const snapshot = createSnapshot();
+      get().refreshStorageState();
+      get().setStorageOperationResult({
+        type: 'createSnapshot',
+        success: true,
+        message: '快照创建成功',
+        details: { snapshotId: snapshot.id, timestamp: snapshot.timestamp },
+        timestamp: Date.now(),
+      });
+      return snapshot;
+    } catch (error) {
+      get().setStorageOperationResult({
+        type: 'createSnapshot',
+        success: false,
+        message: `快照创建失败: ${error instanceof Error ? error.message : '未知错误'}`,
+        timestamp: Date.now(),
+      });
+      return { id: '', timestamp: 0, data: {}, checksum: '' };
+    }
   },
 
   restoreStorageSnapshot: (snapshotId) => {
-    const success = restoreFromSnapshot(snapshotId);
-    if (success) {
-      get().refreshFromStorage();
+    try {
+      const success = restoreFromSnapshot(snapshotId);
+      if (success) {
+        get().refreshFromStorage();
+        get().refreshStorageState();
+        get().setStorageOperationResult({
+          type: 'restoreSnapshot',
+          success: true,
+          message: '快照恢复成功',
+          details: { snapshotId },
+          timestamp: Date.now(),
+        });
+      } else {
+        get().setStorageOperationResult({
+          type: 'restoreSnapshot',
+          success: false,
+          message: '快照恢复失败',
+          details: { snapshotId },
+          timestamp: Date.now(),
+        });
+      }
+      return success;
+    } catch (error) {
+      get().setStorageOperationResult({
+        type: 'restoreSnapshot',
+        success: false,
+        message: `快照恢复失败: ${error instanceof Error ? error.message : '未知错误'}`,
+        details: { snapshotId },
+        timestamp: Date.now(),
+      });
+      return false;
     }
-    return success;
   },
 
   importStorageData: async (file, conflictStrategies) => {
-    const result = await importDataFromFile(file, {
-      conflictStrategies,
-    });
-    if (result.success && result.conflicts.length === 0) {
-      get().refreshFromStorage();
+    try {
+      const result = await importDataFromFile(file, {
+        conflictStrategies,
+      });
+      if (result.success) {
+        get().refreshFromStorage();
+        get().refreshStorageState();
+        get().setStorageOperationResult({
+          type: 'importData',
+          success: true,
+          message: result.conflicts.length > 0 
+            ? `数据导入成功，存在 ${result.conflicts.length} 个冲突已处理` 
+            : '数据导入成功',
+          details: {
+            importedCount: result.importedCount,
+            skippedCount: result.skippedCount,
+            conflictCount: result.conflicts.length,
+            fileName: file.name,
+          },
+          timestamp: Date.now(),
+        });
+      } else {
+        get().setStorageOperationResult({
+          type: 'importData',
+          success: false,
+          message: `数据导入失败: ${result.errors.join(', ')}`,
+          details: {
+            importedCount: result.importedCount,
+            skippedCount: result.skippedCount,
+            conflictCount: result.conflicts.length,
+            fileName: file.name,
+            errors: result.errors,
+          },
+          timestamp: Date.now(),
+        });
+      }
+      return result;
+    } catch (error) {
+      get().setStorageOperationResult({
+        type: 'importData',
+        success: false,
+        message: `数据导入失败: ${error instanceof Error ? error.message : '未知错误'}`,
+        details: { fileName: file.name },
+        timestamp: Date.now(),
+      });
+      return {
+        success: false,
+        importedCount: 0,
+        skippedCount: 0,
+        conflicts: [],
+        errors: [error instanceof Error ? error.message : '未知错误'],
+        warnings: [],
+      };
     }
-    return result;
   },
 
   exportStorageData: (name, scope = 'all') => {
@@ -5209,24 +5398,122 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   runStorageAutoRecovery: () => {
-    const result = autoRecovery();
-    if (result.recovered) {
-      get().refreshFromStorage();
+    try {
+      const result = autoRecovery();
+      if (result.recovered) {
+        get().refreshStorageState();
+        get().setStorageOperationResult({
+          type: 'autoRecovery',
+          success: true,
+          message: '自动恢复成功',
+          details: {
+            recoveredCount: result.recoveredItems.length,
+            recoveredItems: result.recoveredItems,
+            recoverySource: result.recoverySource,
+            warnings: result.warnings,
+          },
+          timestamp: Date.now(),
+        });
+      } else if (result.errors && result.errors.length > 0) {
+        get().setStorageOperationResult({
+          type: 'autoRecovery',
+          success: false,
+          message: `自动恢复失败: ${result.errors.join(', ')}`,
+          details: {
+            recoveredCount: result.recoveredItems.length,
+            recoveredItems: result.recoveredItems,
+            errors: result.errors,
+          },
+          timestamp: Date.now(),
+        });
+      } else {
+        get().setStorageOperationResult({
+          type: 'autoRecovery',
+          success: true,
+          message: '无需恢复，数据状态良好',
+          details: {
+            recoveredCount: result.recoveredItems.length,
+            recoveredItems: result.recoveredItems,
+          },
+          timestamp: Date.now(),
+        });
+      }
+      get().refreshStorageState();
+      return result;
+    } catch (error) {
+      get().setStorageOperationResult({
+        type: 'autoRecovery',
+        success: false,
+        message: `自动恢复失败: ${error instanceof Error ? error.message : '未知错误'}`,
+        timestamp: Date.now(),
+      });
+      return {
+        recovered: false,
+        recoverySource: null,
+        recoveredItems: [],
+        errors: [error instanceof Error ? error.message : '未知错误'],
+        warnings: [],
+      };
     }
-    const health = checkStorageHealth();
-    set({ storageHealth: health });
-    return result;
   },
 
   runStorageMigration: () => {
-    const result = performMigrationIfNeeded();
-    if (result) {
-      get().refreshFromStorage();
+    try {
+      const result = performMigrationIfNeeded();
+      if (result === null) {
+        get().setStorageOperationResult({
+          type: 'migration',
+          success: true,
+          message: '无需迁移，数据已是最新版本',
+          timestamp: Date.now(),
+        });
+        get().refreshStorageState();
+        return null;
+      }
+      if (result.success) {
+        get().refreshStorageState();
+        get().setStorageOperationResult({
+          type: 'migration',
+          success: true,
+          message: '数据迁移成功',
+          details: {
+            fromVersion: result.fromVersion,
+            toVersion: result.toVersion,
+            stepsApplied: result.stepsApplied,
+            warnings: result.warnings,
+          },
+          timestamp: Date.now(),
+        });
+      } else {
+        get().setStorageOperationResult({
+          type: 'migration',
+          success: false,
+          message: `数据迁移失败: ${result.errors.join(', ')}`,
+          details: {
+            fromVersion: result.fromVersion,
+            toVersion: result.toVersion,
+            stepsApplied: result.stepsApplied,
+            errors: result.errors,
+          },
+          timestamp: Date.now(),
+        });
+      }
+      return result;
+    } catch (error) {
+      get().setStorageOperationResult({
+        type: 'migration',
+        success: false,
+        message: `数据迁移失败: ${error instanceof Error ? error.message : '未知错误'}`,
+        timestamp: Date.now(),
+      });
+      return null;
     }
-    return result;
   },
 
   getStorageConfigState: () => {
     return getStorageConfig();
   },
+
+  setStorageOperationResult: (result) => set({ storageOperationResult: result }),
+  clearStorageOperationResult: () => set({ storageOperationResult: null }),
 }));

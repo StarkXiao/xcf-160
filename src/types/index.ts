@@ -1005,6 +1005,27 @@ export interface AppState {
   backups: StorageBackup[];
   snapshots: StorageSnapshot[];
   activeStorageTab: 'management' | 'backups' | 'import' | 'health';
+  storageOperationResult: StorageOperationResult | null;
+}
+
+export type StorageOperationType =
+  | 'createBackup'
+  | 'restoreBackup'
+  | 'deleteBackup'
+  | 'createSnapshot'
+  | 'restoreSnapshot'
+  | 'importData'
+  | 'exportData'
+  | 'autoRecovery'
+  | 'migration'
+  | 'healthCheck';
+
+export interface StorageOperationResult {
+  type: StorageOperationType;
+  success: boolean;
+  message: string;
+  details?: Record<string, unknown>;
+  timestamp: number;
 }
 
 export const APPROVAL_STATUS_LABELS: Record<ApprovalStatus, string> = {
