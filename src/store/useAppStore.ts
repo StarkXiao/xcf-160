@@ -5401,7 +5401,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     try {
       const result = autoRecovery();
       if (result.recovered) {
-        get().refreshStorageState();
+        get().refreshFromStorage();
         get().setStorageOperationResult({
           type: 'autoRecovery',
           success: true,
@@ -5415,6 +5415,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
           timestamp: Date.now(),
         });
       } else if (result.errors && result.errors.length > 0) {
+        get().refreshStorageState();
         get().setStorageOperationResult({
           type: 'autoRecovery',
           success: false,
@@ -5427,6 +5428,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
           timestamp: Date.now(),
         });
       } else {
+        get().refreshStorageState();
         get().setStorageOperationResult({
           type: 'autoRecovery',
           success: true,
@@ -5438,7 +5440,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
           timestamp: Date.now(),
         });
       }
-      get().refreshStorageState();
       return result;
     } catch (error) {
       get().setStorageOperationResult({
@@ -5471,7 +5472,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         return null;
       }
       if (result.success) {
-        get().refreshStorageState();
+        get().refreshFromStorage();
         get().setStorageOperationResult({
           type: 'migration',
           success: true,
@@ -5497,6 +5498,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
           },
           timestamp: Date.now(),
         });
+        get().refreshStorageState();
       }
       return result;
     } catch (error) {

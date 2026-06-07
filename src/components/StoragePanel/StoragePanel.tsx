@@ -220,11 +220,14 @@ export const StoragePanel: React.FC = () => {
         setConflicts(validation.conflicts);
       } catch {
         setImportValidation({
-          valid: false,
-          errors: [{ field: 'file', message: '文件解析失败', severity: 'error' }],
+          isValid: false,
+          errors: [{ field: 'file', message: '文件解析失败', code: 'invalid_type', severity: 'error' }],
           warnings: [],
+          fixedCount: 0,
+          needsMigration: false,
+          canImport: false,
           conflicts: [],
-          stats: { totalItems: 0, presets: 0, schemes: 0, projects: 0, templates: 0 },
+          statistics: { totalItems: 0, validItems: 0, invalidItems: 0, conflictingItems: 0 },
         });
       }
     };
