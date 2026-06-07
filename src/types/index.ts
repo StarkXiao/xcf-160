@@ -2659,3 +2659,209 @@ export const MATERIAL_COMBO_FAVORITES_KEY = 'material_combo_favorites';
 export function formatMaterialDescription(material: MaterialConfig): string {
   return `${FRAME_MATERIAL_LABELS[material.frameMaterial]} + ${WALL_MATERIAL_LABELS[material.wallMaterial]} | 反光${Math.round(material.reflectivity * 100)}% / 粗糙${Math.round(material.roughness * 100)}%`;
 }
+
+export const STORAGE_VERSION = '1.1.0';
+export const STORAGE_SCHEMA_VERSION = 2;
+
+export type StorageKey =
+  | 'presets'
+  | 'presetGroups'
+  | 'gallerySchemes'
+  | 'curatorProjects'
+  | 'proposals'
+  | 'lightingTemplates'
+  | 'materialCombos'
+  | 'sceneRecommendations'
+  | 'themeCollections'
+  | 'lightingPresets'
+  | 'lightingHistory'
+  | 'exhibitionWallConfig'
+  | 'appState';
+
+export interface StorageMetadata {
+  schemaVersion: number;
+  appVersion: string;
+  createdAt: number;
+  updatedAt: number;
+  lastBackupAt?: number;
+  lastMigrationAt?: number;
+  dataSize: number;
+  itemCount: number;
+}
+
+export interface StorageBackup {
+  id: string;
+  name: string;
+  description?: string;
+  metadata: StorageMetadata;
+  data: Record<string, unknown>;
+  createdAt: number;
+  size: number;
+  checksum: string;
+  isAutoBackup: boolean;
+}
+
+export interface BackupInfo {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt: number;
+  size: number;
+  isAutoBackup: boolean;
+  schemaVersion: number;
+  appVersion: string;
+}
+
+export type ConflictResolutionStrategy =
+  | 'keepLocal'
+  | 'keepImported'
+  | 'merge'
+  | 'renameImported'
+  | 'skip';
+
+export interface StorageConflict {
+  type: 'id' | 'content' | 'schema' | 'dependency';
+  key: string;
+  itemId: string;
+  localData?: unknown;
+  importedData?: unknown;
+  message: string;
+  severity: 'warning' | 'error';
+  resolution?: ConflictResolutionStrategy;
+  resolvedData?: unknown;
+}
+
+export interface StorageValidationError {
+  field: string;
+  message: string;
+  code:
+    | 'missing_required'
+    | 'invalid_type'
+    | 'invalid_value'
+    | 'data_corrupted'
+    | 'schema_mismatch'
+    | 'version_unsupported'
+    | 'too_large'
+    | 'checksum_mismatch';
+  severity: 'warning' | 'error';
+}
+
+export interface StorageValidationResult {
+  isValid: boolean;
+  errors: StorageValidationError[];
+  warnings: StorageValidationError[];
+  fixedCount: number;
+}
+
+export interface ImportValidationResult extends StorageValidationResult {
+  detectedSchemaVersion?: number;
+  needsMigration: boolean;
+  canImport: boolean;
+  conflicts: StorageConflict[];
+  statistics: {
+    totalItems: number;
+    validItems: number;
+    invalidItems: number;
+    conflictingItems: number;
+  };
+}
+
+export interface ImportResult {
+  success: boolean;
+  importedCount: number;
+  skippedCount: number;
+  conflicts: StorageConflict[];
+  errors: string[];
+  warnings: string[];
+  migrationApplied?: DataMigrationResult;
+}
+
+export interface DataMigrationStep {
+  fromVersion: number;
+  toVersion: number;
+  migrate: (data: Record<string, unknown>) => Record<string, unknown>;
+  description: string;
+}
+
+export interface DataMigrationResult {
+  success: boolean;
+  fromVersion: number;
+  toVersion: number;
+  stepsApplied: number;
+  warnings: string[];
+  errors: string[];
+  migratedData?: Record<string, unknown>;
+}
+
+export interface AutoRecoveryResult {
+  recovered: boolean;
+  recoverySource: 'backup' | 'snapshot' | 'default' | null;
+  recoveredItems: string[];
+  errors: string[];
+  warnings: string[];
+  backupUsed?: BackupInfo;
+}
+
+export interface StorageSnapshot {
+  id: string;
+  timestamp: number;
+  data: Record<string, unknown>;
+  checksum: string;
+}
+
+export interface StorageHealthStatus {
+  isHealthy: boolean;
+  corruptedKeys: string[];
+  missingKeys: string[];
+  lastCheckAt: number;
+  recommendations: string[];
+  hasRecentBackup: boolean;
+  needsMigration: boolean;
+  currentSchemaVersion: number;
+  latestSchemaVersion: number;
+}
+
+export interface StorageConfig {
+  autoBackupEnabled: boolean;
+  autoBackupInterval: number;
+  maxAutoBackups: number;
+  snapshotEnabled: boolean;
+  snapshotInterval: number;
+  maxSnapshots: number;
+  autoRecoveryEnabled: boolean;
+  validateOnImport: boolean;
+  conflictDefaultStrategy: ConflictResolutionStrategy;
+  maxStorageSize: number;
+}
+
+export const DEFAULT_STORAGE_CONFIG: StorageConfig = {
+  autoBackupEnabled: true,
+  autoBackupInterval: 30 * 60 * 1000,
+  maxAutoBackups: 10,
+  snapshotEnabled: true,
+  snapshotInterval: 5 * 60 * 1000,
+  maxSnapshots: 20,
+  autoRecoveryEnabled: true,
+  validateOnImport: true,
+  conflictDefaultStrategy: 'renameImported',
+  maxStorageSize: 50 * 1024 * 1024,
+};
+
+export type ExportScope = 'all' | 'presets' | 'schemes' | 'projects' | 'templates' | 'custom';
+
+export interface ExportOptions {
+  scope: ExportScope;
+  includeMetadata: boolean;
+  includeHistory: boolean;
+  compress: boolean;
+  password?: string;
+}
+
+export const EXPORT_SCOPE_LABELS: Record<ExportScope, string> = {
+  all: '全部数据',
+  presets: '仅预设方案',
+  schemes: '仅展厅方案',
+  projects: '仅策展项目',
+  templates: '仅模板配置',
+  custom: '自定义选择',
+};
