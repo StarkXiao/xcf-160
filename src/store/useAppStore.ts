@@ -27,6 +27,10 @@ import type {
   WallColor,
   AmbientLightTemplate,
   PreviewAdaptation,
+  GuideLinesConfig,
+  ZoomPanConfig,
+  DimensionConfig,
+  DisplayModeConfig,
   ApprovalRequest,
   ApprovalStatus,
   ApprovalComment,
@@ -130,6 +134,10 @@ import {
   DEFAULT_LIGHTING_PRESETS,
   LIGHTING_PARAMETER_CONSTRAINTS,
   LIGHTING_RECOMMENDATIONS,
+  DEFAULT_GUIDE_LINES,
+  DEFAULT_ZOOM_PAN,
+  DEFAULT_DIMENSIONS,
+  DEFAULT_DISPLAY_MODE,
 } from '../types';
 import type { LocalPresetSortType } from '../types';
 import type {
@@ -350,6 +358,14 @@ interface AppStore extends AppState {
   setWallColor: (wallColor: Partial<WallColor>) => void;
   setAmbientLight: (ambientLight: AmbientLightTemplate) => void;
   setPreviewAdaptation: (adaptation: Partial<PreviewAdaptation>) => void;
+  setGuideLines: (guideLines: Partial<GuideLinesConfig>) => void;
+  setZoomPan: (zoomPan: Partial<ZoomPanConfig>) => void;
+  setDimensionsConfig: (dimensions: Partial<DimensionConfig>) => void;
+  setDisplayMode: (displayMode: Partial<DisplayModeConfig>) => void;
+  toggleFullscreen: () => void;
+  toggleImmersiveMode: () => void;
+  resetZoomPan: () => void;
+  resetGuideLines: () => void;
   resetExhibitionWallConfig: () => void;
   setExhibitionWallConfig: (config: Partial<ExhibitionWallConfig>) => void;
   createApprovalRequest: (data: Omit<ApprovalRequest, 'id' | 'createdAt' | 'status'>) => ApprovalRequest;
@@ -3602,6 +3618,128 @@ export const useAppStore = create<AppStore>((set, get) => ({
       const newConfig = {
         ...state.exhibitionWallConfig,
         previewAdaptation: { ...state.exhibitionWallConfig.previewAdaptation, ...adaptation },
+      };
+      saveExhibitionWallConfig(newConfig);
+      return { exhibitionWallConfig: newConfig };
+    });
+  },
+
+  setGuideLines: (guideLines) => {
+    set((state) => {
+      const newConfig = {
+        ...state.exhibitionWallConfig,
+        previewAdaptation: {
+          ...state.exhibitionWallConfig.previewAdaptation,
+          guideLines: { ...state.exhibitionWallConfig.previewAdaptation.guideLines, ...guideLines },
+        },
+      };
+      saveExhibitionWallConfig(newConfig);
+      return { exhibitionWallConfig: newConfig };
+    });
+  },
+
+  setZoomPan: (zoomPan) => {
+    set((state) => {
+      const newConfig = {
+        ...state.exhibitionWallConfig,
+        previewAdaptation: {
+          ...state.exhibitionWallConfig.previewAdaptation,
+          zoomPan: { ...state.exhibitionWallConfig.previewAdaptation.zoomPan, ...zoomPan },
+        },
+      };
+      saveExhibitionWallConfig(newConfig);
+      return { exhibitionWallConfig: newConfig };
+    });
+  },
+
+  setDimensionsConfig: (dimensions) => {
+    set((state) => {
+      const newConfig = {
+        ...state.exhibitionWallConfig,
+        previewAdaptation: {
+          ...state.exhibitionWallConfig.previewAdaptation,
+          dimensions: { ...state.exhibitionWallConfig.previewAdaptation.dimensions, ...dimensions },
+        },
+      };
+      saveExhibitionWallConfig(newConfig);
+      return { exhibitionWallConfig: newConfig };
+    });
+  },
+
+  setDisplayMode: (displayMode) => {
+    set((state) => {
+      const newConfig = {
+        ...state.exhibitionWallConfig,
+        previewAdaptation: {
+          ...state.exhibitionWallConfig.previewAdaptation,
+          displayMode: { ...state.exhibitionWallConfig.previewAdaptation.displayMode, ...displayMode },
+        },
+      };
+      saveExhibitionWallConfig(newConfig);
+      return { exhibitionWallConfig: newConfig };
+    });
+  },
+
+  toggleFullscreen: () => {
+    set((state) => {
+      const newIsFullscreen = !state.exhibitionWallConfig.previewAdaptation.displayMode.isFullscreen;
+      const newConfig = {
+        ...state.exhibitionWallConfig,
+        previewAdaptation: {
+          ...state.exhibitionWallConfig.previewAdaptation,
+          displayMode: {
+            ...state.exhibitionWallConfig.previewAdaptation.displayMode,
+            isFullscreen: newIsFullscreen,
+          },
+        },
+      };
+      saveExhibitionWallConfig(newConfig);
+      return { exhibitionWallConfig: newConfig };
+    });
+  },
+
+  toggleImmersiveMode: () => {
+    set((state) => {
+      const newImmersiveMode = !state.exhibitionWallConfig.previewAdaptation.displayMode.immersiveMode;
+      const newConfig = {
+        ...state.exhibitionWallConfig,
+        previewAdaptation: {
+          ...state.exhibitionWallConfig.previewAdaptation,
+          displayMode: {
+            ...state.exhibitionWallConfig.previewAdaptation.displayMode,
+            immersiveMode: newImmersiveMode,
+            showControls: !newImmersiveMode,
+            showInfoOverlay: !newImmersiveMode,
+          },
+        },
+      };
+      saveExhibitionWallConfig(newConfig);
+      return { exhibitionWallConfig: newConfig };
+    });
+  },
+
+  resetZoomPan: () => {
+    set((state) => {
+      const newConfig = {
+        ...state.exhibitionWallConfig,
+        previewAdaptation: {
+          ...state.exhibitionWallConfig.previewAdaptation,
+          zoomPan: { ...DEFAULT_ZOOM_PAN },
+        },
+      };
+      saveExhibitionWallConfig(newConfig);
+      return { exhibitionWallConfig: newConfig };
+    });
+  },
+
+  resetGuideLines: () => {
+    set((state) => {
+      const newConfig = {
+        ...state.exhibitionWallConfig,
+        previewAdaptation: {
+          ...state.exhibitionWallConfig.previewAdaptation,
+          guideLines: { ...DEFAULT_GUIDE_LINES },
+        },
       };
       saveExhibitionWallConfig(newConfig);
       return { exhibitionWallConfig: newConfig };

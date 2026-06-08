@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Grid3X3, Palette, Sun, Maximize2, RotateCcw, Check, ChevronDown } from 'lucide-react';
+import { Grid3X3, Palette, Sun, Maximize2, RotateCcw, Check, Crosshair, Ruler, Move, Eye, Monitor, ZoomIn, ZoomOut } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import {
   WALL_UNIT_LABELS,
@@ -8,23 +8,32 @@ import {
   AMBIENT_LIGHT_PRESET_LABELS,
   PREVIEW_ASPECT_RATIO_LABELS,
   PREVIEW_FIT_MODE_LABELS,
-  DEFAULT_EXHIBITION_WALL_CONFIG,
+  DIMENSION_UNIT_LABELS,
+  DEFAULT_GUIDE_LINES,
+  DEFAULT_ZOOM_PAN,
+  DEFAULT_DIMENSIONS,
+  DEFAULT_DISPLAY_MODE,
 } from '../../types';
 import type {
   WallDimensions,
   AmbientLightTemplate,
   PreviewAspectRatio,
   PreviewFitMode,
+  DimensionConfig,
 } from '../../types';
 import { kelvinToHex } from '../../utils/color';
 
-type ConfigTab = 'dimensions' | 'wallColor' | 'ambientLight' | 'preview';
+type ConfigTab = 'dimensions' | 'wallColor' | 'ambientLight' | 'preview' | 'guidelines' | 'dimensionsPanel' | 'zoomPan' | 'display';
 
 const tabConfig: { id: ConfigTab; label: string; icon: React.ReactNode }[] = [
   { id: 'dimensions', label: '墙面尺寸', icon: <Maximize2 className="w-4 h-4" /> },
   { id: 'wallColor', label: '底色材质', icon: <Palette className="w-4 h-4" /> },
   { id: 'ambientLight', label: '环境光', icon: <Sun className="w-4 h-4" /> },
   { id: 'preview', label: '预览适配', icon: <Grid3X3 className="w-4 h-4" /> },
+  { id: 'guidelines', label: '参考线', icon: <Crosshair className="w-4 h-4" /> },
+  { id: 'dimensionsPanel', label: '尺寸标注', icon: <Ruler className="w-4 h-4" /> },
+  { id: 'zoomPan', label: '缩放平移', icon: <Move className="w-4 h-4" /> },
+  { id: 'display', label: '显示模式', icon: <Monitor className="w-4 h-4" /> },
 ];
 
 const presetWallColors = [
@@ -46,10 +55,17 @@ export const ExhibitionWallConfig: React.FC = () => {
     setWallColor,
     setAmbientLight,
     setPreviewAdaptation,
+    setGuideLines,
+    setZoomPan,
+    setDimensionsConfig,
+    setDisplayMode,
     resetExhibitionWallConfig,
+    resetZoomPan,
+    resetGuideLines,
   } = useAppStore();
 
   const { dimensions, wallColor, ambientLight, previewAdaptation } = exhibitionWallConfig;
+  const { guideLines, zoomPan, dimensions: dimensionsConfig, displayMode } = previewAdaptation;
 
   const handleDimensionChange = (key: keyof WallDimensions, value: number | string) => {
     setWallDimensions({ [key]: value } as Partial<WallDimensions>);
@@ -717,6 +733,756 @@ export const ExhibitionWallConfig: React.FC = () => {
     );
   };
 
+  const renderGuideLinesTab = () => (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm text-white/70">启用参考线</p>
+          <p className="text-xs text-white/40">显示构图辅助线</p>
+        </div>
+        <button
+          onClick={() => setGuideLines({ enabled: !guideLines.enabled })}
+          className={`w-11 h-6 rounded-full transition-colors relative ${
+            guideLines.enabled ? 'bg-gold' : 'bg-gallery-border'
+          }`}
+        >
+          <div
+            className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+              guideLines.enabled ? 'translate-x-6' : 'translate-x-0.5'
+            }`}
+          />
+        </button>
+      </div>
+
+      {guideLines.enabled && (
+        <>
+          <div className="space-y-4 pt-4 border-t border-gallery-border">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-white/70">中心线</p>
+                <p className="text-xs text-white/40">水平和垂直中心轴线</p>
+              </div>
+              <button
+                onClick={() => setGuideLines({ showCenterLines: !guideLines.showCenterLines })}
+                className={`w-11 h-6 rounded-full transition-colors relative ${
+                  guideLines.showCenterLines ? 'bg-gold' : 'bg-gallery-border'
+                }`}
+              >
+                <div
+                  className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                    guideLines.showCenterLines ? 'translate-x-6' : 'translate-x-0.5'
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-white/70">三等分线</p>
+                <p className="text-xs text-white/40">三分构图法辅助线</p>
+              </div>
+              <button
+                onClick={() => setGuideLines({ showThirds: !guideLines.showThirds })}
+                className={`w-11 h-6 rounded-full transition-colors relative ${
+                  guideLines.showThirds ? 'bg-gold' : 'bg-gallery-border'
+                }`}
+              >
+                <div
+                  className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                    guideLines.showThirds ? 'translate-x-6' : 'translate-x-0.5'
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-white/70">黄金分割线</p>
+                <p className="text-xs text-white/40">38.2% 和 61.8% 分割线</p>
+              </div>
+              <button
+                onClick={() => setGuideLines({ showGoldenRatio: !guideLines.showGoldenRatio })}
+                className={`w-11 h-6 rounded-full transition-colors relative ${
+                  guideLines.showGoldenRatio ? 'bg-gold' : 'bg-gallery-border'
+                }`}
+              >
+                <div
+                  className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                    guideLines.showGoldenRatio ? 'translate-x-6' : 'translate-x-0.5'
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-white/70">十字准星</p>
+                <p className="text-xs text-white/40">中心定位十字标记</p>
+              </div>
+              <button
+                onClick={() => setGuideLines({ showCrosshair: !guideLines.showCrosshair })}
+                className={`w-11 h-6 rounded-full transition-colors relative ${
+                  guideLines.showCrosshair ? 'bg-gold' : 'bg-gallery-border'
+                }`}
+              >
+                <div
+                  className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                    guideLines.showCrosshair ? 'translate-x-6' : 'translate-x-0.5'
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-white/70">边界标记</p>
+                <p className="text-xs text-white/40">边缘安全区指示</p>
+              </div>
+              <button
+                onClick={() => setGuideLines({ showBorderMarkers: !guideLines.showBorderMarkers })}
+                className={`w-11 h-6 rounded-full transition-colors relative ${
+                  guideLines.showBorderMarkers ? 'bg-gold' : 'bg-gallery-border'
+                }`}
+              >
+                <div
+                  className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                    guideLines.showBorderMarkers ? 'translate-x-6' : 'translate-x-0.5'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-4 pt-4 border-t border-gallery-border">
+            <div>
+              <div className="flex justify-between text-xs text-white/40 mb-2">
+                <span>参考线颜色</span>
+              </div>
+              <div className="flex gap-3">
+                <input
+                  type="color"
+                  value={guideLines.color}
+                  onChange={(e) => setGuideLines({ color: e.target.value })}
+                  className="w-12 h-12 rounded-lg border-2 border-gallery-border cursor-pointer"
+                />
+                <input
+                  type="text"
+                  value={guideLines.color}
+                  onChange={(e) => setGuideLines({ color: e.target.value })}
+                  className="flex-1 px-3 py-2 bg-gallery-bg border border-gallery-border rounded-lg text-white text-sm focus:outline-none focus:border-gold/50 transition-colors"
+                />
+              </div>
+            </div>
+
+            <div>
+              <div className="flex justify-between text-xs text-white/40 mb-2">
+                <span>透明度</span>
+                <span className="text-gold">{Math.round(guideLines.opacity * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min="0.1"
+                max="1"
+                step="0.05"
+                value={guideLines.opacity}
+                onChange={(e) => setGuideLines({ opacity: Number(e.target.value) })}
+                className="w-full h-2 bg-gallery-border rounded-lg appearance-none cursor-pointer accent-gold"
+              />
+            </div>
+          </div>
+
+          <button
+            onClick={resetGuideLines}
+            className="w-full py-2 px-4 bg-gallery-bg border border-gallery-border rounded-lg text-sm text-white/70 hover:text-white hover:border-gold/50 transition-all flex items-center justify-center gap-2"
+          >
+            <RotateCcw className="w-4 h-4" />
+            重置参考线设置
+          </button>
+        </>
+      )}
+
+      <div className="p-4 rounded-xl bg-gallery-bg border border-gallery-border">
+        <h4 className="text-sm font-medium text-white mb-3">参考线预览</h4>
+        <div className="relative w-full aspect-[4/3] bg-gallery-surface rounded-lg overflow-hidden">
+          {guideLines.enabled && (
+            <>
+              {guideLines.showCenterLines && (
+                <>
+                  <div className="absolute left-1/2 top-0 bottom-0 w-px" style={{ backgroundColor: guideLines.color, opacity: guideLines.opacity }} />
+                  <div className="absolute top-1/2 left-0 right-0 h-px" style={{ backgroundColor: guideLines.color, opacity: guideLines.opacity }} />
+                </>
+              )}
+              {guideLines.showThirds && (
+                <>
+                  <div className="absolute left-[33.33%] top-0 bottom-0 w-px" style={{ backgroundColor: guideLines.color, opacity: guideLines.opacity * 0.7 }} />
+                  <div className="absolute left-[66.67%] top-0 bottom-0 w-px" style={{ backgroundColor: guideLines.color, opacity: guideLines.opacity * 0.7 }} />
+                  <div className="absolute top-[33.33%] left-0 right-0 h-px" style={{ backgroundColor: guideLines.color, opacity: guideLines.opacity * 0.7 }} />
+                  <div className="absolute top-[66.67%] left-0 right-0 h-px" style={{ backgroundColor: guideLines.color, opacity: guideLines.opacity * 0.7 }} />
+                </>
+              )}
+              {guideLines.showGoldenRatio && (
+                <>
+                  <div className="absolute left-[38.2%] top-0 bottom-0 w-px" style={{ backgroundColor: guideLines.color, opacity: guideLines.opacity * 0.8 }} />
+                  <div className="absolute left-[61.8%] top-0 bottom-0 w-px" style={{ backgroundColor: guideLines.color, opacity: guideLines.opacity * 0.8 }} />
+                  <div className="absolute top-[38.2%] left-0 right-0 h-px" style={{ backgroundColor: guideLines.color, opacity: guideLines.opacity * 0.8 }} />
+                  <div className="absolute top-[61.8%] left-0 right-0 h-px" style={{ backgroundColor: guideLines.color, opacity: guideLines.opacity * 0.8 }} />
+                </>
+              )}
+              {guideLines.showCrosshair && (
+                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+                  <div className="w-6 h-6 relative">
+                    <div className="absolute left-1/2 top-0 bottom-0 w-px -translate-x-1/2" style={{ backgroundColor: guideLines.color, opacity: guideLines.opacity }} />
+                    <div className="absolute top-1/2 left-0 right-0 h-px -translate-y-1/2" style={{ backgroundColor: guideLines.color, opacity: guideLines.opacity }} />
+                    <div className="absolute left-1/2 top-1/2 w-2 h-2 rounded-full -translate-x-1/2 -translate-y-1/2" style={{ backgroundColor: guideLines.color, opacity: guideLines.opacity }} />
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+          <div className="absolute bottom-2 left-2 text-[10px] text-white/40">
+            {guideLines.enabled ? '参考线已启用' : '参考线已关闭'}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderDimensionsPanelTab = () => (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm text-white/70">启用尺寸标注</p>
+          <p className="text-xs text-white/40">显示尺寸和比例信息</p>
+        </div>
+        <button
+          onClick={() => setDimensionsConfig({ enabled: !dimensionsConfig.enabled })}
+          className={`w-11 h-6 rounded-full transition-colors relative ${
+            dimensionsConfig.enabled ? 'bg-gold' : 'bg-gallery-border'
+          }`}
+        >
+          <div
+            className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+              dimensionsConfig.enabled ? 'translate-x-6' : 'translate-x-0.5'
+            }`}
+          />
+        </button>
+      </div>
+
+      {dimensionsConfig.enabled && (
+        <>
+          <div className="space-y-4 pt-4 border-t border-gallery-border">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-white/70">作品尺寸</p>
+                <p className="text-xs text-white/40">显示每件作品的尺寸信息</p>
+              </div>
+              <button
+                onClick={() => setDimensionsConfig({ showArtworkDimensions: !dimensionsConfig.showArtworkDimensions })}
+                className={`w-11 h-6 rounded-full transition-colors relative ${
+                  dimensionsConfig.showArtworkDimensions ? 'bg-gold' : 'bg-gallery-border'
+                }`}
+              >
+                <div
+                  className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                    dimensionsConfig.showArtworkDimensions ? 'translate-x-6' : 'translate-x-0.5'
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-white/70">墙面尺寸</p>
+                <p className="text-xs text-white/40">显示墙面整体尺寸</p>
+              </div>
+              <button
+                onClick={() => setDimensionsConfig({ showWallDimensions: !dimensionsConfig.showWallDimensions })}
+                className={`w-11 h-6 rounded-full transition-colors relative ${
+                  dimensionsConfig.showWallDimensions ? 'bg-gold' : 'bg-gallery-border'
+                }`}
+              >
+                <div
+                  className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                    dimensionsConfig.showWallDimensions ? 'translate-x-6' : 'translate-x-0.5'
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-white/70">标尺</p>
+                <p className="text-xs text-white/40">显示边缘刻度标尺</p>
+              </div>
+              <button
+                onClick={() => setDimensionsConfig({ showRuler: !dimensionsConfig.showRuler })}
+                className={`w-11 h-6 rounded-full transition-colors relative ${
+                  dimensionsConfig.showRuler ? 'bg-gold' : 'bg-gallery-border'
+                }`}
+              >
+                <div
+                  className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                    dimensionsConfig.showRuler ? 'translate-x-6' : 'translate-x-0.5'
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-white/70">比例参考</p>
+                <p className="text-xs text-white/40">显示比例尺参照物</p>
+              </div>
+              <button
+                onClick={() => setDimensionsConfig({ showScaleReference: !dimensionsConfig.showScaleReference })}
+                className={`w-11 h-6 rounded-full transition-colors relative ${
+                  dimensionsConfig.showScaleReference ? 'bg-gold' : 'bg-gallery-border'
+                }`}
+              >
+                <div
+                  className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                    dimensionsConfig.showScaleReference ? 'translate-x-6' : 'translate-x-0.5'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-4 pt-4 border-t border-gallery-border">
+            <div>
+              <label className="block text-sm text-white/70 mb-3">单位</label>
+              <div className="grid grid-cols-2 gap-2">
+                {(Object.keys(DIMENSION_UNIT_LABELS) as DimensionConfig['unit'][]).map((unit) => (
+                  <button
+                    key={unit}
+                    onClick={() => setDimensionsConfig({ unit })}
+                    className={`px-3 py-2 rounded-lg border text-sm font-medium transition-all ${
+                      dimensionsConfig.unit === unit
+                        ? 'border-gold bg-gold/10 text-gold'
+                        : 'border-gallery-border bg-gallery-bg text-white/70 hover:border-gold/50 hover:text-white'
+                    }`}
+                  >
+                    {DIMENSION_UNIT_LABELS[unit]}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div className="flex justify-between text-xs text-white/40 mb-2">
+                <span>小数精度</span>
+                <span className="text-gold">{dimensionsConfig.precision} 位</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="3"
+                step="1"
+                value={dimensionsConfig.precision}
+                onChange={(e) => setDimensionsConfig({ precision: Number(e.target.value) })}
+                className="w-full h-2 bg-gallery-border rounded-lg appearance-none cursor-pointer accent-gold"
+              />
+            </div>
+          </div>
+
+          <button
+            onClick={() => setDimensionsConfig({ ...DEFAULT_DIMENSIONS })}
+            className="w-full py-2 px-4 bg-gallery-bg border border-gallery-border rounded-lg text-sm text-white/70 hover:text-white hover:border-gold/50 transition-all flex items-center justify-center gap-2"
+          >
+            <RotateCcw className="w-4 h-4" />
+            重置尺寸设置
+          </button>
+        </>
+      )}
+
+      <div className="p-4 rounded-xl bg-gallery-bg border border-gallery-border">
+        <h4 className="text-sm font-medium text-white mb-3">尺寸标注预览</h4>
+        <div className="relative w-full aspect-[4/3] bg-gallery-surface rounded-lg overflow-hidden">
+          {dimensionsConfig.enabled && dimensionsConfig.showRuler && (
+            <>
+              <div className="absolute top-0 left-0 right-0 h-4 bg-gallery-bg/80 flex items-end overflow-hidden">
+                {Array.from({ length: 9 }).map((_, i) => (
+                  <div key={i} className="flex-1 relative">
+                    <div
+                      className="absolute bottom-0 left-0 w-px bg-gold/60"
+                      style={{ height: i % 2 === 0 ? '10px' : '5px' }}
+                    />
+                    {i % 2 === 0 && (
+                      <span className="absolute bottom-0.5 left-1 text-[7px] text-gold/80">
+                        {i * 10}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="absolute top-0 left-0 bottom-0 w-4 bg-gallery-bg/80 flex flex-col items-end overflow-hidden">
+                {Array.from({ length: 7 }).map((_, i) => (
+                  <div key={i} className="flex-1 relative w-full">
+                    <div
+                      className="absolute right-0 top-0 h-px bg-gold/60"
+                      style={{ width: i % 2 === 0 ? '10px' : '5px' }}
+                    />
+                    {i % 2 === 0 && (
+                      <span className="absolute top-0.5 right-0.5 text-[7px] text-gold/80">
+                        {i * 10}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          <div className="absolute left-[25%] top-[30%] w-[20%] h-[40%] bg-gold/30 rounded">
+            {dimensionsConfig.enabled && dimensionsConfig.showArtworkDimensions && (
+              <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 px-1.5 py-0.5 bg-gallery-surface/90 rounded text-[8px] text-gold whitespace-nowrap">
+                50 × 100 {dimensionsConfig.unit}
+              </div>
+            )}
+          </div>
+          <div className="absolute left-[55%] top-[40%] w-[25%] h-[30%] bg-blue-200/30 rounded">
+            {dimensionsConfig.enabled && dimensionsConfig.showArtworkDimensions && (
+              <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 px-1.5 py-0.5 bg-gallery-surface/90 rounded text-[8px] text-gold whitespace-nowrap">
+                60 × 70 {dimensionsConfig.unit}
+              </div>
+            )}
+          </div>
+          {dimensionsConfig.enabled && dimensionsConfig.showScaleReference && (
+            <div className="absolute bottom-2 left-2 px-2 py-1 bg-gallery-bg/90 rounded text-[8px] text-white/80">
+              <div className="flex items-center gap-1.5">
+                <div className="w-8 h-0.5 bg-gold/60 relative">
+                  <div className="absolute top-0 left-0 w-px h-1.5 bg-gold/60 -translate-y-1/2" />
+                  <div className="absolute top-0 right-0 w-px h-1.5 bg-gold/60 -translate-y-1/2" />
+                </div>
+                <span>50 {dimensionsConfig.unit}</span>
+              </div>
+            </div>
+          )}
+          {dimensionsConfig.enabled && dimensionsConfig.showWallDimensions && (
+            <div className="absolute top-2 right-2 px-2 py-1 bg-gallery-bg/90 rounded text-[8px] text-white/80">
+              <div className="flex items-center gap-1">
+                <Ruler className="w-2.5 h-2.5 text-gold" />
+                <span>800 × 400 cm</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderZoomPanTab = () => (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm text-white/70">启用缩放平移</p>
+          <p className="text-xs text-white/40">滚轮缩放和拖拽平移</p>
+        </div>
+        <button
+          onClick={() => setZoomPan({ enabled: !zoomPan.enabled })}
+          className={`w-11 h-6 rounded-full transition-colors relative ${
+            zoomPan.enabled ? 'bg-gold' : 'bg-gallery-border'
+          }`}
+        >
+          <div
+            className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+              zoomPan.enabled ? 'translate-x-6' : 'translate-x-0.5'
+            }`}
+          />
+        </button>
+      </div>
+
+      {zoomPan.enabled && (
+        <>
+          <div className="space-y-4 pt-4 border-t border-gallery-border">
+            <div>
+              <div className="flex justify-between text-xs text-white/40 mb-2">
+                <span>当前缩放</span>
+                <span className="text-gold">{Math.round(zoomPan.zoomLevel * 100)}%</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    const newZoom = Math.max(zoomPan.minZoom, zoomPan.zoomLevel - zoomPan.zoomStep);
+                    setZoomPan({ zoomLevel: newZoom });
+                  }}
+                  className="p-2 bg-gallery-bg border border-gallery-border rounded-lg text-white/70 hover:text-white hover:border-gold/50 transition-all"
+                >
+                  <ZoomOut className="w-4 h-4" />
+                </button>
+                <input
+                  type="range"
+                  min={zoomPan.minZoom}
+                  max={zoomPan.maxZoom}
+                  step={zoomPan.zoomStep}
+                  value={zoomPan.zoomLevel}
+                  onChange={(e) => setZoomPan({ zoomLevel: Number(e.target.value) })}
+                  className="flex-1 h-2 bg-gallery-border rounded-lg appearance-none cursor-pointer accent-gold"
+                />
+                <button
+                  onClick={() => {
+                    const newZoom = Math.min(zoomPan.maxZoom, zoomPan.zoomLevel + zoomPan.zoomStep);
+                    setZoomPan({ zoomLevel: newZoom });
+                  }}
+                  className="p-2 bg-gallery-bg border border-gallery-border rounded-lg text-white/70 hover:text-white hover:border-gold/50 transition-all"
+                >
+                  <ZoomIn className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <div className="flex justify-between text-xs text-white/40 mb-2">
+                <span>最小缩放</span>
+                <span className="text-gold">{Math.round(zoomPan.minZoom * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min="0.25"
+                max="1"
+                step="0.05"
+                value={zoomPan.minZoom}
+                onChange={(e) => setZoomPan({ minZoom: Number(e.target.value) })}
+                className="w-full h-2 bg-gallery-border rounded-lg appearance-none cursor-pointer accent-gold"
+              />
+            </div>
+
+            <div>
+              <div className="flex justify-between text-xs text-white/40 mb-2">
+                <span>最大缩放</span>
+                <span className="text-gold">{Math.round(zoomPan.maxZoom * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min="1"
+                max="8"
+                step="0.5"
+                value={zoomPan.maxZoom}
+                onChange={(e) => setZoomPan({ maxZoom: Number(e.target.value) })}
+                className="w-full h-2 bg-gallery-border rounded-lg appearance-none cursor-pointer accent-gold"
+              />
+            </div>
+
+            <div>
+              <div className="flex justify-between text-xs text-white/40 mb-2">
+                <span>缩放步长</span>
+                <span className="text-gold">{Math.round(zoomPan.zoomStep * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min="0.05"
+                max="0.3"
+                step="0.05"
+                value={zoomPan.zoomStep}
+                onChange={(e) => setZoomPan({ zoomStep: Number(e.target.value) })}
+                className="w-full h-2 bg-gallery-border rounded-lg appearance-none cursor-pointer accent-gold"
+              />
+            </div>
+
+            <div className="p-3 rounded-lg bg-gallery-bg/50 border border-gallery-border">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-white/70">当前位置</p>
+                  <p className="text-[10px] text-white/40 font-mono">
+                    X: {zoomPan.panX.toFixed(0)}, Y: {zoomPan.panY.toFixed(0)}
+                  </p>
+                </div>
+                <button
+                  onClick={resetZoomPan}
+                  className="px-3 py-1.5 bg-gold/10 text-gold text-xs rounded-lg hover:bg-gold/20 transition-colors"
+                >
+                  重置位置
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setZoomPan({ ...DEFAULT_ZOOM_PAN })}
+            className="w-full py-2 px-4 bg-gallery-bg border border-gallery-border rounded-lg text-sm text-white/70 hover:text-white hover:border-gold/50 transition-all flex items-center justify-center gap-2"
+          >
+            <RotateCcw className="w-4 h-4" />
+            重置缩放设置
+          </button>
+        </>
+      )}
+
+      <div className="p-4 rounded-xl bg-gallery-bg border border-gallery-border">
+        <h4 className="text-sm font-medium text-white mb-3">快捷键</h4>
+        <div className="space-y-2 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-white/60">放大</span>
+            <span className="text-gold font-mono">+ 或 滚轮上</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-white/60">缩小</span>
+            <span className="text-gold font-mono">- 或 滚轮下</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-white/60">重置视图</span>
+            <span className="text-gold font-mono">R</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-white/60">平移</span>
+            <span className="text-gold font-mono">拖拽 (缩放 {'>'} 100% 时)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderDisplayTab = () => (
+    <div className="space-y-6">
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-white/70">显示控制栏</p>
+            <p className="text-xs text-white/40">显示顶部标题栏</p>
+          </div>
+          <button
+            onClick={() => setDisplayMode({ showControls: !displayMode.showControls })}
+            className={`w-11 h-6 rounded-full transition-colors relative ${
+              displayMode.showControls ? 'bg-gold' : 'bg-gallery-border'
+            }`}
+          >
+            <div
+              className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                displayMode.showControls ? 'translate-x-6' : 'translate-x-0.5'
+              }`}
+            />
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-white/70">显示信息覆盖层</p>
+            <p className="text-xs text-white/40">显示角落的配置信息</p>
+          </div>
+          <button
+            onClick={() => setDisplayMode({ showInfoOverlay: !displayMode.showInfoOverlay })}
+            className={`w-11 h-6 rounded-full transition-colors relative ${
+              displayMode.showInfoOverlay ? 'bg-gold' : 'bg-gallery-border'
+            }`}
+          >
+            <div
+              className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                displayMode.showInfoOverlay ? 'translate-x-6' : 'translate-x-0.5'
+              }`}
+            />
+          </button>
+        </div>
+      </div>
+
+      <div className="pt-4 border-t border-gallery-border">
+        <h4 className="text-sm font-medium text-white mb-4">快捷模式</h4>
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={() => setDisplayMode({ isFullscreen: !displayMode.isFullscreen })}
+            className={`p-4 rounded-xl border text-left transition-all ${
+              displayMode.isFullscreen
+                ? 'border-gold bg-gold/10'
+                : 'border-gallery-border bg-gallery-bg hover:border-gold/50'
+            }`}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <Maximize2 className={`w-5 h-5 ${displayMode.isFullscreen ? 'text-gold' : 'text-white/60'}`} />
+              <span className={`font-medium ${displayMode.isFullscreen ? 'text-gold' : 'text-white'}`}>
+                全屏模式
+              </span>
+            </div>
+            <p className="text-[10px] text-white/40">预览区域全屏显示</p>
+            <p className="text-[10px] text-gold/60 mt-1">快捷键: F</p>
+          </button>
+
+          <button
+            onClick={() => setDisplayMode({ immersiveMode: !displayMode.immersiveMode })}
+            className={`p-4 rounded-xl border text-left transition-all ${
+              displayMode.immersiveMode
+                ? 'border-gold bg-gold/10'
+                : 'border-gallery-border bg-gallery-bg hover:border-gold/50'
+            }`}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <Eye className={`w-5 h-5 ${displayMode.immersiveMode ? 'text-gold' : 'text-white/60'}`} />
+              <span className={`font-medium ${displayMode.immersiveMode ? 'text-gold' : 'text-white'}`}>
+                沉浸模式
+              </span>
+            </div>
+            <p className="text-[10px] text-white/40">2秒无操作自动隐藏UI</p>
+            <p className="text-[10px] text-gold/60 mt-1">快捷键: I</p>
+          </button>
+        </div>
+      </div>
+
+      <div className="pt-4 border-t border-gallery-border">
+        <h4 className="text-sm font-medium text-white mb-4">快速预设</h4>
+        <div className="space-y-2">
+          <button
+            onClick={() => {
+              setDisplayMode({ showControls: true, showInfoOverlay: true, immersiveMode: false, isFullscreen: false });
+              setGuideLines({ ...DEFAULT_GUIDE_LINES });
+              setZoomPan({ ...DEFAULT_ZOOM_PAN });
+              setDimensionsConfig({ ...DEFAULT_DIMENSIONS });
+            }}
+            className="w-full p-3 rounded-lg border border-gallery-border bg-gallery-bg text-left hover:border-gold/50 transition-all"
+          >
+            <p className="text-sm text-white font-medium">标准模式</p>
+            <p className="text-xs text-white/40">显示所有控制，无辅助线</p>
+          </button>
+
+          <button
+            onClick={() => {
+              setDisplayMode({ showControls: true, showInfoOverlay: true, immersiveMode: false, isFullscreen: false });
+              setGuideLines({ enabled: true, showCenterLines: true, showThirds: true, showGoldenRatio: false, showCrosshair: false, showBorderMarkers: false, color: '#d4af37', opacity: 0.6 });
+              setDimensionsConfig({ enabled: true, showArtworkDimensions: true, showWallDimensions: true, showRuler: true, showScaleReference: true, unit: 'cm', precision: 1 });
+            }}
+            className="w-full p-3 rounded-lg border border-gallery-border bg-gallery-bg text-left hover:border-gold/50 transition-all"
+          >
+            <p className="text-sm text-white font-medium">布展模式</p>
+            <p className="text-xs text-white/40">显示辅助线和尺寸标注</p>
+          </button>
+
+          <button
+            onClick={() => {
+              setDisplayMode({ showControls: false, showInfoOverlay: false, immersiveMode: true, isFullscreen: true });
+              setGuideLines({ enabled: false, showCenterLines: false, showGoldenRatio: false, showThirds: false, showCrosshair: false, showBorderMarkers: false, color: '#d4af37', opacity: 0.6 });
+              setDimensionsConfig({ enabled: false, showArtworkDimensions: false, showWallDimensions: false, showRuler: false, showScaleReference: false, unit: 'cm', precision: 1 });
+            }}
+            className="w-full p-3 rounded-lg border border-gallery-border bg-gallery-bg text-left hover:border-gold/50 transition-all"
+          >
+            <p className="text-sm text-white font-medium">欣赏模式</p>
+            <p className="text-xs text-white/40">全屏沉浸，无干扰</p>
+          </button>
+        </div>
+      </div>
+
+      <button
+        onClick={() => setDisplayMode({ ...DEFAULT_DISPLAY_MODE })}
+        className="w-full py-2 px-4 bg-gallery-bg border border-gallery-border rounded-lg text-sm text-white/70 hover:text-white hover:border-gold/50 transition-all flex items-center justify-center gap-2"
+      >
+        <RotateCcw className="w-4 h-4" />
+        重置显示设置
+      </button>
+
+      <div className="p-4 rounded-xl bg-gallery-bg border border-gallery-border">
+        <h4 className="text-sm font-medium text-white mb-3">快捷键</h4>
+        <div className="space-y-2 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-white/60">全屏模式</span>
+            <span className="text-gold font-mono">F</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-white/60">沉浸模式</span>
+            <span className="text-gold font-mono">I</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-white/60">退出全屏/沉浸</span>
+            <span className="text-gold font-mono">ESC</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   const renderTabContent = () => {
     switch (activeTab) {
       case 'dimensions':
@@ -727,6 +1493,14 @@ export const ExhibitionWallConfig: React.FC = () => {
         return renderAmbientLightTab();
       case 'preview':
         return renderPreviewTab();
+      case 'guidelines':
+        return renderGuideLinesTab();
+      case 'dimensionsPanel':
+        return renderDimensionsPanelTab();
+      case 'zoomPan':
+        return renderZoomPanTab();
+      case 'display':
+        return renderDisplayTab();
       default:
         return null;
     }

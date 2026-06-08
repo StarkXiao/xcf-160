@@ -460,6 +460,46 @@ export interface AmbientLightTemplate {
 export type PreviewAspectRatio = '16:9' | '4:3' | '1:1' | '9:16' | 'custom';
 export type PreviewFitMode = 'contain' | 'cover' | 'fill' | 'fit_width' | 'fit_height';
 
+export type GuideLineType = 'center' | 'golden' | 'thirds' | 'crosshair' | 'border';
+
+export interface GuideLinesConfig {
+  enabled: boolean;
+  showCenterLines: boolean;
+  showGoldenRatio: boolean;
+  showThirds: boolean;
+  showCrosshair: boolean;
+  showBorderMarkers: boolean;
+  color: string;
+  opacity: number;
+}
+
+export interface ZoomPanConfig {
+  enabled: boolean;
+  zoomLevel: number;
+  minZoom: number;
+  maxZoom: number;
+  panX: number;
+  panY: number;
+  zoomStep: number;
+}
+
+export interface DimensionConfig {
+  enabled: boolean;
+  showArtworkDimensions: boolean;
+  showWallDimensions: boolean;
+  showRuler: boolean;
+  showScaleReference: boolean;
+  unit: 'cm' | 'm' | 'ft' | 'in';
+  precision: number;
+}
+
+export interface DisplayModeConfig {
+  isFullscreen: boolean;
+  showControls: boolean;
+  showInfoOverlay: boolean;
+  immersiveMode: boolean;
+}
+
 export interface PreviewAdaptation {
   aspectRatio: PreviewAspectRatio;
   customWidth?: number;
@@ -470,6 +510,10 @@ export interface PreviewAdaptation {
   gridSize: number;
   showSafeArea: boolean;
   safeAreaMargin: number;
+  guideLines: GuideLinesConfig;
+  zoomPan: ZoomPanConfig;
+  dimensions: DimensionConfig;
+  displayMode: DisplayModeConfig;
 }
 
 export interface ExhibitionWallConfig {
@@ -848,6 +892,13 @@ export const PREVIEW_FIT_MODE_LABELS: Record<PreviewFitMode, string> = {
   fit_height: '适应高度',
 };
 
+export const DIMENSION_UNIT_LABELS: Record<DimensionConfig['unit'], string> = {
+  cm: '厘米 (cm)',
+  m: '米 (m)',
+  ft: '英尺 (ft)',
+  in: '英寸 (in)',
+};
+
 export const DEFAULT_WALL_DIMENSIONS: WallDimensions = {
   width: 800,
   height: 400,
@@ -865,6 +916,44 @@ export const DEFAULT_WALL_COLOR: WallColor = {
 
 export const DEFAULT_AMBIENT_LIGHT: AmbientLightTemplate = AMBIENT_LIGHT_PRESETS[0];
 
+export const DEFAULT_GUIDE_LINES: GuideLinesConfig = {
+  enabled: false,
+  showCenterLines: true,
+  showGoldenRatio: false,
+  showThirds: false,
+  showCrosshair: false,
+  showBorderMarkers: false,
+  color: '#d4af37',
+  opacity: 0.6,
+};
+
+export const DEFAULT_ZOOM_PAN: ZoomPanConfig = {
+  enabled: true,
+  zoomLevel: 1,
+  minZoom: 0.5,
+  maxZoom: 4,
+  panX: 0,
+  panY: 0,
+  zoomStep: 0.1,
+};
+
+export const DEFAULT_DIMENSIONS: DimensionConfig = {
+  enabled: false,
+  showArtworkDimensions: true,
+  showWallDimensions: true,
+  showRuler: false,
+  showScaleReference: true,
+  unit: 'cm',
+  precision: 1,
+};
+
+export const DEFAULT_DISPLAY_MODE: DisplayModeConfig = {
+  isFullscreen: false,
+  showControls: true,
+  showInfoOverlay: true,
+  immersiveMode: false,
+};
+
 export const DEFAULT_PREVIEW_ADAPTATION: PreviewAdaptation = {
   aspectRatio: '16:9',
   fitMode: 'contain',
@@ -873,6 +962,10 @@ export const DEFAULT_PREVIEW_ADAPTATION: PreviewAdaptation = {
   gridSize: 50,
   showSafeArea: false,
   safeAreaMargin: 5,
+  guideLines: { ...DEFAULT_GUIDE_LINES },
+  zoomPan: { ...DEFAULT_ZOOM_PAN },
+  dimensions: { ...DEFAULT_DIMENSIONS },
+  displayMode: { ...DEFAULT_DISPLAY_MODE },
 };
 
 export const DEFAULT_EXHIBITION_WALL_CONFIG: ExhibitionWallConfig = {
