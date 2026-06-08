@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 export interface ArtworkTag {
   id: string;
   name: string;
@@ -1099,6 +1101,8 @@ export interface AppState {
   snapshots: StorageSnapshot[];
   activeStorageTab: 'management' | 'backups' | 'import' | 'health';
   storageOperationResult: StorageOperationResult | null;
+  dirtySchemeIds: Set<string>;
+  schemeSnapshots: Record<string, GalleryScheme>;
 }
 
 export type StorageOperationType =
@@ -2781,6 +2785,56 @@ export function formatMaterialDescription(material: MaterialConfig): string {
 
 export const STORAGE_VERSION = '1.1.0';
 export const STORAGE_SCHEMA_VERSION = 2;
+
+export interface SchemeDraft {
+  schemeId: string;
+  scheme: GalleryScheme;
+  savedAt: number;
+  autoSaved: boolean;
+}
+
+export interface DirtyCheckResult {
+  isDirty: boolean;
+  changedFields: string[];
+  lastSavedAt: number;
+}
+
+export type ConfirmDialogAction = 
+  | 'switch_scheme'
+  | 'delete_scheme'
+  | 'leave_page'
+  | 'apply_template'
+  | 'reset_changes'
+  | 'discard_changes'
+  | 'restore_draft';
+
+export interface ConfirmDialogConfig {
+  action: ConfirmDialogAction;
+  title: string;
+  message: React.ReactNode;
+  confirmText?: string;
+  cancelText?: string;
+  confirmType?: 'primary' | 'danger';
+  showIcon?: boolean;
+  showDiscardOption?: boolean;
+  schemeName?: string;
+  onConfirm: () => void;
+  onCancel?: () => void;
+  onDiscard?: () => void;
+  onClose?: () => void;
+}
+
+export const SCHEME_DIRTY_FIELDS: (keyof GalleryScheme)[] = [
+  'name',
+  'description',
+  'wallArtworks',
+  'lightingStrategy',
+  'wallMaterial',
+  'groups',
+];
+
+export const DRAFT_AUTO_SAVE_INTERVAL = 3000;
+export const DRAFT_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 
 export type StorageKey =
   | 'presets'

@@ -84,6 +84,9 @@ function AppContent() {
     setStorageHealth,
     setStorageMetadata,
     refreshFromStorage,
+    hasAnyDirtyScheme,
+    getDirtySchemesCount,
+    saveCurrentSchemeDraft,
   } = useAppStore();
   const { addToast } = useToast();
   const [leftCollapsed, setLeftCollapsed] = useState(false);
@@ -98,6 +101,32 @@ function AppContent() {
   const currentScheme = gallerySchemes.find((s) => s.id === currentSchemeId);
   const currentProject = curatorProjects.find((p) => p.id === currentProjectId);
   const activeTabs = appMode === 'curator' ? tabs : artworkModeTabs;
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasAnyDirtyScheme()) {
+        const count = getDirtySchemesCount();
+        const message = `您有${count}个方案存在未保存的更改，确定要离开吗？`;
+        e.preventDefault();
+        e.returnValue = message;
+        return message;
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasAnyDirtyScheme, getDirtySchemesCount]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden' && hasAnyDirtyScheme()) {
+        saveCurrentSchemeDraft(true);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [hasAnyDirtyScheme, saveCurrentSchemeDraft]);
 
   const getStatusColor = (status: string) => {
     switch (status) {

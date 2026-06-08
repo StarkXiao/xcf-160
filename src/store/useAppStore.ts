@@ -98,6 +98,8 @@ import type {
   StorageSnapshot,
   StorageOperationResult,
   StorageOperationType,
+  SchemeDraft,
+  DirtyCheckResult,
 } from '../types';
 import {
   DEFAULT_LIGHTING,
@@ -219,6 +221,13 @@ import {
   saveStorageConfig,
   validateImportData,
   getStorageMetadata,
+  saveSchemeDraft,
+  loadSchemeDraft,
+  deleteSchemeDraft,
+  loadSchemeDrafts,
+  checkSchemeDirty,
+  hasSchemeDraft,
+  clearAllSchemeDrafts,
 } from '../utils/storage';
 import {
   performTourAdaptation,
@@ -542,6 +551,18 @@ interface AppStore extends AppState {
   runStorageAutoRecovery: () => ReturnType<typeof autoRecovery>;
   runStorageMigration: () => ReturnType<typeof performMigrationIfNeeded>;
   getStorageConfigState: () => StorageConfig;
+  checkCurrentSchemeDirty: () => DirtyCheckResult;
+  saveSchemeDirtySnapshot: (schemeId: string) => void;
+  markSchemeDirty: (schemeId: string) => void;
+  clearSchemeDirty: (schemeId: string) => void;
+  isSchemeDirty: (schemeId: string) => boolean;
+  getCurrentSchemeDraft: () => SchemeDraft | null;
+  saveCurrentSchemeDraft: (autoSaved?: boolean) => void;
+  restoreSchemeFromDraft: (schemeId: string) => boolean;
+  discardSchemeChanges: (schemeId: string) => void;
+  clearAllSchemeDrafts: () => void;
+  getDirtySchemesCount: () => number;
+  hasAnyDirtyScheme: () => boolean;
 }
 
 const getInitialState = (): AppState => {
@@ -696,6 +717,8 @@ const getInitialState = (): AppState => {
     snapshots: savedSnapshots,
     activeStorageTab: 'management',
     storageOperationResult: null,
+    dirtySchemeIds: new Set<string>(),
+    schemeSnapshots: {},
   };
 };
 
@@ -1510,6 +1533,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       ),
     }));
     saveGallerySchemes(get().gallerySchemes);
+    get().markSchemeDirty(id);
   },
 
   addArtworksToScheme: (artworkIds) => {
@@ -1564,6 +1588,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       selectedWallArtworkIds: newWallArtworks.map((w) => w.id),
     }));
     saveGallerySchemes(get().gallerySchemes);
+    get().markSchemeDirty(currentSchemeId);
   },
 
   removeWallArtwork: (wallArtworkId) => {
@@ -1583,6 +1608,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       selectedWallArtworkIds: selectedWallArtworkIds.filter((id) => id !== wallArtworkId),
     }));
     saveGallerySchemes(get().gallerySchemes);
+    get().markSchemeDirty(currentSchemeId);
   },
 
   updateWallArtworkPosition: (wallArtworkId, position) => {
@@ -1605,6 +1631,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       ),
     }));
     saveGallerySchemes(get().gallerySchemes);
+    get().markSchemeDirty(currentSchemeId);
   },
 
   updateWallArtworkLighting: (wallArtworkId, lighting) => {
@@ -1627,6 +1654,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       ),
     }));
     saveGallerySchemes(get().gallerySchemes);
+    get().markSchemeDirty(currentSchemeId);
   },
 
   updateWallArtworkMaterial: (wallArtworkId, material) => {
@@ -1649,6 +1677,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       ),
     }));
     saveGallerySchemes(get().gallerySchemes);
+    get().markSchemeDirty(currentSchemeId);
   },
 
   setLightingStrategy: (strategy) => {
@@ -1667,6 +1696,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       ),
     }));
     saveGallerySchemes(get().gallerySchemes);
+    get().markSchemeDirty(currentSchemeId);
   },
 
   applyLightingStrategyToSelected: () => {
@@ -1694,6 +1724,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       ),
     }));
     saveGallerySchemes(get().gallerySchemes);
+    get().markSchemeDirty(currentSchemeId);
   },
 
   selectWallArtwork: (id, multiSelect = false) => {
@@ -1819,6 +1850,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       ),
     }));
     saveGallerySchemes(get().gallerySchemes);
+    get().markSchemeDirty(currentSchemeId);
   },
 
   setAppMode: (mode) => {
@@ -5652,6 +5684,118 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   getStorageConfigState: () => {
     return getStorageConfig();
+  },
+
+  checkCurrentSchemeDirty: () => {
+    const state = get();
+    if (!state.currentSchemeId) {
+      return { isDirty: false, changedFields: [], lastSavedAt: Date.now() };
+    }
+    const currentScheme = state.gallerySchemes.find((s) => s.id === state.currentSchemeId);
+    const savedScheme = state.schemeSnapshots[state.currentSchemeId];
+    if (!currentScheme || !savedScheme) {
+      return { isDirty: false, changedFields: [], lastSavedAt: currentScheme?.updatedAt || Date.now() };
+    }
+    return checkSchemeDirty(currentScheme, savedScheme);
+  },
+
+  saveSchemeDirtySnapshot: (schemeId) => {
+    const state = get();
+    const scheme = state.gallerySchemes.find((s) => s.id === schemeId);
+    if (scheme) {
+      set((prev) => ({
+        schemeSnapshots: {
+          ...prev.schemeSnapshots,
+          [schemeId]: JSON.parse(JSON.stringify(scheme)),
+        },
+      }));
+    }
+  },
+
+  markSchemeDirty: (schemeId) => {
+    set((state) => {
+      const newDirtyIds = new Set(state.dirtySchemeIds);
+      newDirtyIds.add(schemeId);
+      return { dirtySchemeIds: newDirtyIds };
+    });
+  },
+
+  clearSchemeDirty: (schemeId) => {
+    set((state) => {
+      const newDirtyIds = new Set(state.dirtySchemeIds);
+      newDirtyIds.delete(schemeId);
+      return { dirtySchemeIds: newDirtyIds };
+    });
+    deleteSchemeDraft(schemeId);
+  },
+
+  isSchemeDirty: (schemeId) => {
+    return get().dirtySchemeIds.has(schemeId);
+  },
+
+  getCurrentSchemeDraft: () => {
+    const state = get();
+    if (!state.currentSchemeId) return null;
+    return loadSchemeDraft(state.currentSchemeId);
+  },
+
+  saveCurrentSchemeDraft: (autoSaved = false) => {
+    const state = get();
+    if (!state.currentSchemeId) return;
+    const currentScheme = state.gallerySchemes.find((s) => s.id === state.currentSchemeId);
+    if (!currentScheme) return;
+    const draft: SchemeDraft = {
+      schemeId: state.currentSchemeId,
+      scheme: JSON.parse(JSON.stringify(currentScheme)),
+      savedAt: Date.now(),
+      autoSaved,
+    };
+    saveSchemeDraft(draft);
+  },
+
+  restoreSchemeFromDraft: (schemeId) => {
+    const draft = loadSchemeDraft(schemeId);
+    if (!draft) return false;
+    const state = get();
+    const schemeIndex = state.gallerySchemes.findIndex((s) => s.id === schemeId);
+    if (schemeIndex === -1) return false;
+    set((prev) => {
+      const newSchemes = [...prev.gallerySchemes];
+      newSchemes[schemeIndex] = { ...draft.scheme, updatedAt: Date.now() };
+      return { gallerySchemes: newSchemes };
+    });
+    saveGallerySchemes(get().gallerySchemes);
+    return true;
+  },
+
+  discardSchemeChanges: (schemeId) => {
+    const state = get();
+    const savedScheme = state.schemeSnapshots[schemeId];
+    if (!savedScheme) return;
+    const schemeIndex = state.gallerySchemes.findIndex((s) => s.id === schemeId);
+    if (schemeIndex === -1) return;
+    set((prev) => {
+      const newSchemes = [...prev.gallerySchemes];
+      newSchemes[schemeIndex] = { ...savedScheme, updatedAt: Date.now() };
+      const newDirtyIds = new Set(prev.dirtySchemeIds);
+      newDirtyIds.delete(schemeId);
+      return { gallerySchemes: newSchemes, dirtySchemeIds: newDirtyIds };
+    });
+    saveGallerySchemes(get().gallerySchemes);
+    deleteSchemeDraft(schemeId);
+  },
+
+  clearAllSchemeDrafts: () => {
+    clearAllSchemeDrafts();
+    set({ dirtySchemeIds: new Set<string>(), schemeSnapshots: {} });
+  },
+
+  getDirtySchemesCount: () => {
+    return get().dirtySchemeIds.size;
+  },
+
+  hasAnyDirtyScheme: () => {
+    return get().dirtySchemeIds.size > 0;
   },
 
   setStorageOperationResult: (result) => set({ storageOperationResult: result }),

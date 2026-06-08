@@ -30,11 +30,15 @@ import type {
   StorageConfig,
   ExportOptions,
   ExportScope,
+  SchemeDraft,
+  DirtyCheckResult,
 } from '../types';
 import {
   STORAGE_VERSION,
   STORAGE_SCHEMA_VERSION,
   DEFAULT_STORAGE_CONFIG,
+  SCHEME_DIRTY_FIELDS,
+  DRAFT_MAX_AGE,
 } from '../types';
 
 const PRESETS_KEY = 'artwork_preview_presets';
@@ -57,6 +61,7 @@ const SCENE_RECOMMENDATIONS_KEY = 'artwork_preview_scene_recommendations';
 const THEME_COLLECTIONS_KEY = 'artwork_preview_theme_collections';
 const LIGHTING_PRESETS_KEY = 'artwork_preview_lighting_presets';
 const LIGHTING_HISTORY_KEY = 'artwork_preview_lighting_history';
+const SCHEME_DRAFTS_KEY = 'artwork_preview_scheme_drafts';
 
 export interface ProjectExportData {
   project: CuratorProject;
@@ -1898,5 +1903,93 @@ export function clearAllStorage(): void {
   localStorage.removeItem(STORAGE_BACKUPS_KEY);
   localStorage.removeItem(STORAGE_SNAPSHOTS_KEY);
   localStorage.removeItem(STORAGE_CONFIG_KEY);
+  localStorage.removeItem(SCHEME_DRAFTS_KEY);
   updateStorageMetadata();
+}
+
+export function saveSchemeDraft(draft: SchemeDraft): void {
+  try {
+    const drafts = loadSchemeDrafts();
+    const existingIndex = drafts.findIndex((d) => d.schemeId === draft.schemeId);
+    if (existingIndex >= 0) {
+      drafts[existingIndex] = draft;
+    } else {
+      drafts.push(draft);
+    }
+    const cleanedDrafts = drafts.filter(
+      (d) => Date.now() - d.savedAt < DRAFT_MAX_AGE
+    );
+    localStorage.setItem(SCHEME_DRAFTS_KEY, JSON.stringify(cleanedDrafts));
+  } catch (e) {
+    console.error('Failed to save scheme draft:', e);
+  }
+}
+
+export function loadSchemeDrafts(): SchemeDraft[] {
+  try {
+    const data = localStorage.getItem(SCHEME_DRAFTS_KEY);
+    if (!data) return [];
+    const drafts = JSON.parse(data) as SchemeDraft[];
+    return drafts.filter((d) => Date.now() - d.savedAt < DRAFT_MAX_AGE);
+  } catch (e) {
+    console.error('Failed to load scheme drafts:', e);
+    return [];
+  }
+}
+
+export function loadSchemeDraft(schemeId: string): SchemeDraft | null {
+  const drafts = loadSchemeDrafts();
+  return drafts.find((d) => d.schemeId === schemeId) || null;
+}
+
+export function deleteSchemeDraft(schemeId: string): void {
+  try {
+    const drafts = loadSchemeDrafts();
+    const filtered = drafts.filter((d) => d.schemeId !== schemeId);
+    localStorage.setItem(SCHEME_DRAFTS_KEY, JSON.stringify(filtered));
+  } catch (e) {
+    console.error('Failed to delete scheme draft:', e);
+  }
+}
+
+export function clearAllSchemeDrafts(): void {
+  try {
+    localStorage.removeItem(SCHEME_DRAFTS_KEY);
+  } catch (e) {
+    console.error('Failed to clear scheme drafts:', e);
+  }
+}
+
+export function checkSchemeDirty(
+  currentScheme: GalleryScheme,
+  savedScheme: GalleryScheme
+): DirtyCheckResult {
+  const changedFields: string[] = [];
+
+  for (const field of SCHEME_DIRTY_FIELDS) {
+    const currentValue = currentScheme[field];
+    const savedValue = savedScheme[field];
+
+    if (typeof currentValue === 'object' && currentValue !== null) {
+      if (JSON.stringify(currentValue) !== JSON.stringify(savedValue)) {
+        changedFields.push(field);
+      }
+    } else if (currentValue !== savedValue) {
+      changedFields.push(field);
+    }
+  }
+
+  return {
+    isDirty: changedFields.length > 0,
+    changedFields,
+    lastSavedAt: savedScheme.updatedAt,
+  };
+}
+
+export function hasSchemeDraft(schemeId: string): boolean {
+  return loadSchemeDraft(schemeId) !== null;
+}
+
+export function getDraftCount(): number {
+  return loadSchemeDrafts().length;
 }

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutGrid,
@@ -23,16 +23,21 @@ import {
   Printer,
   FileText,
   History,
+  AlertCircle,
+  Save,
+  RotateCcw,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
-import { SCHEME_PANEL_TABS } from '../../types';
-import type { SchemePanelTab, GalleryScheme } from '../../types';
+import { SCHEME_PANEL_TABS, DRAFT_AUTO_SAVE_INTERVAL } from '../../types';
+import type { SchemePanelTab, GalleryScheme, ConfirmDialogConfig, DirtyCheckResult } from '../../types';
 import { WallLayout } from './WallLayout';
 import { LightingStrategyPanel } from './LightingStrategyPanel';
 import { SchemeSnapshot } from './SchemeSnapshot';
 import { ArtworkGroupManager } from '../ArtworkGroupManager/ArtworkGroupManager';
 import { ProgressTracker } from '../ProgressTracker/ProgressTracker';
-import { importScheme as importSchemeUtil } from '../../utils/storage';
+import ConfirmDialog from '../ConfirmDialog';
+import { importScheme as importSchemeUtil, hasSchemeDraft, loadSchemeDraft } from '../../utils/storage';
+import { useToast } from '../Toast/ToastContext';
 
 export const SchemeOrchestrator: React.FC = () => {
   const {
@@ -41,6 +46,7 @@ export const SchemeOrchestrator: React.FC = () => {
     schemePanelTab,
     curatorProjects,
     currentProjectId,
+    dirtySchemeIds,
     setCurrentScheme,
     setCurrentProject,
     setSchemePanelTab,
@@ -52,7 +58,18 @@ export const SchemeOrchestrator: React.FC = () => {
     updateScheme,
     setShowCuratorHub,
     setCuratorHubTab,
+    saveSchemeDirtySnapshot,
+    markSchemeDirty,
+    clearSchemeDirty,
+    isSchemeDirty,
+    checkCurrentSchemeDirty,
+    saveCurrentSchemeDraft,
+    restoreSchemeFromDraft,
+    discardSchemeChanges,
+    getCurrentSchemeDraft,
   } = useAppStore();
+
+  const { addToast } = useToast();
 
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newSchemeName, setNewSchemeName] = useState('');
@@ -60,6 +77,14 @@ export const SchemeOrchestrator: React.FC = () => {
   const [editingSchemeId, setEditingSchemeId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const [showSchemeDropdown, setShowSchemeDropdown] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogConfig | null>(null);
+  const [showDraftRestoreDialog, setShowDraftRestoreDialog] = useState<string | null>(null);
+  const [dirtyCheckResult, setDirtyCheckResult] = useState<DirtyCheckResult | null>(null);
+  const [isAutoSaving, setIsAutoSaving] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initializedSchemeIdsRef = useRef<Set<string>>(new Set());
 
   const currentScheme = useMemo(
     () => gallerySchemes.find((s) => s.id === currentSchemeId),
@@ -73,6 +98,177 @@ export const SchemeOrchestrator: React.FC = () => {
 
   const projectIdForProgress = currentProjectId || currentSchemeProject?.id;
 
+  const debouncedAutoSave = useCallback(() => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+    autoSaveTimerRef.current = setTimeout(() => {
+      if (currentSchemeId && isSchemeDirty(currentSchemeId)) {
+        setIsAutoSaving(true);
+        saveCurrentSchemeDraft(true);
+        setLastSavedAt(Date.now());
+        setTimeout(() => setIsAutoSaving(false), 500);
+      }
+    }, DRAFT_AUTO_SAVE_INTERVAL);
+  }, [currentSchemeId, isSchemeDirty, saveCurrentSchemeDraft]);
+
+  const initializeScheme = useCallback((schemeId: string) => {
+    if (!initializedSchemeIdsRef.current.has(schemeId)) {
+      saveSchemeDirtySnapshot(schemeId);
+      initializedSchemeIdsRef.current.add(schemeId);
+
+      if (hasSchemeDraft(schemeId)) {
+        setShowDraftRestoreDialog(schemeId);
+      }
+    }
+  }, [saveSchemeDirtySnapshot]);
+
+  useEffect(() => {
+    if (currentSchemeId) {
+      initializeScheme(currentSchemeId);
+    }
+  }, [currentSchemeId, initializeScheme]);
+
+  useEffect(() => {
+    if (currentSchemeId && isSchemeDirty(currentSchemeId)) {
+      debouncedAutoSave();
+    }
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, [currentSchemeId, dirtySchemeIds, debouncedAutoSave]);
+
+  useEffect(() => {
+    if (currentSchemeId) {
+      const result = checkCurrentSchemeDirty();
+      setDirtyCheckResult(result);
+    }
+  }, [currentSchemeId, gallerySchemes, checkCurrentSchemeDirty]);
+
+  const handleSchemeSwitch = (schemeId: string) => {
+    if (schemeId === currentSchemeId) return;
+
+    if (currentSchemeId && isSchemeDirty(currentSchemeId)) {
+      const result = checkCurrentSchemeDirty();
+      const scheme = gallerySchemes.find((s) => s.id === currentSchemeId);
+      setConfirmDialog({
+        action: 'switch_scheme',
+        title: '未保存的更改',
+        message: (
+          <div>
+            <p className="mb-3">方案"{scheme?.name || '当前方案'}"有未保存的更改：</p>
+            <ul className="text-xs text-white/60 space-y-1 mb-3">
+              {result.changedFields.slice(0, 5).map((field) => (
+                <li key={field} className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 bg-amber-400 rounded-full" />
+                  {field}
+                </li>
+              ))}
+              {result.changedFields.length > 5 && (
+                <li className="text-white/40">还有 {result.changedFields.length - 5} 项更改...</li>
+              )}
+            </ul>
+            <p className="text-xs text-white/50">您想如何处理？</p>
+          </div>
+        ),
+        confirmText: '保存并切换',
+        cancelText: '放弃更改',
+        confirmType: 'primary',
+        onConfirm: () => {
+          saveCurrentSchemeDraft(false);
+          clearSchemeDirty(currentSchemeId);
+          setCurrentScheme(schemeId);
+          setConfirmDialog(null);
+          addToast('success', '已保存草稿');
+        },
+        onCancel: () => {
+          discardSchemeChanges(currentSchemeId);
+          setCurrentScheme(schemeId);
+          setConfirmDialog(null);
+          addToast('info', '已放弃更改');
+        },
+        onClose: () => setConfirmDialog(null),
+      });
+    } else {
+      setCurrentScheme(schemeId);
+    }
+    setShowSchemeDropdown(false);
+  };
+
+  const handleManualSave = () => {
+    if (!currentSchemeId) return;
+    saveCurrentSchemeDraft(false);
+    clearSchemeDirty(currentSchemeId);
+    setLastSavedAt(Date.now());
+    addToast('success', '方案已保存');
+  };
+
+  const handleDiscardChanges = () => {
+    if (!currentSchemeId) return;
+    const scheme = gallerySchemes.find((s) => s.id === currentSchemeId);
+    setConfirmDialog({
+      action: 'discard_changes',
+      title: '确认放弃更改',
+      message: `确定要放弃对方案"${scheme?.name}"的所有更改吗？此操作无法撤销。`,
+      confirmText: '放弃更改',
+      cancelText: '继续编辑',
+      confirmType: 'danger',
+      onConfirm: () => {
+        discardSchemeChanges(currentSchemeId);
+        setConfirmDialog(null);
+        addToast('info', '已放弃更改');
+      },
+      onCancel: () => setConfirmDialog(null),
+      onClose: () => setConfirmDialog(null),
+    });
+  };
+
+  const handleRestoreDraft = () => {
+    if (!showDraftRestoreDialog) return;
+    const draft = loadSchemeDraft(showDraftRestoreDialog);
+    if (!draft) {
+      setShowDraftRestoreDialog(null);
+      return;
+    }
+    const scheme = gallerySchemes.find((s) => s.id === showDraftRestoreDialog);
+    setConfirmDialog({
+      action: 'restore_draft',
+      title: '恢复上次编辑',
+      message: (
+        <div>
+          <p className="mb-2">检测到方案"{scheme?.name}"有未保存的草稿：</p>
+          <p className="text-xs text-white/60">
+            保存时间：{new Date(draft.savedAt).toLocaleString()}
+          </p>
+          <p className="text-xs text-white/60 mb-3">
+            类型：{draft.autoSaved ? '自动保存' : '手动保存'}
+          </p>
+          <p className="text-xs text-white/50">是否恢复到此版本？</p>
+        </div>
+      ),
+      confirmText: '恢复草稿',
+      cancelText: '不恢复',
+      confirmType: 'primary',
+      onConfirm: () => {
+        restoreSchemeFromDraft(showDraftRestoreDialog);
+        saveSchemeDirtySnapshot(showDraftRestoreDialog);
+        setShowDraftRestoreDialog(null);
+        setConfirmDialog(null);
+        addToast('success', '已恢复上次编辑');
+      },
+      onCancel: () => {
+        setShowDraftRestoreDialog(null);
+        setConfirmDialog(null);
+      },
+      onClose: () => {
+        setShowDraftRestoreDialog(null);
+        setConfirmDialog(null);
+      },
+    });
+  };
+
   const handleCreateScheme = () => {
     if (!newSchemeName.trim()) return;
     createScheme(newSchemeName.trim(), newSchemeDescription.trim() || undefined);
@@ -83,9 +279,28 @@ export const SchemeOrchestrator: React.FC = () => {
 
   const handleDeleteScheme = (id: string) => {
     const scheme = gallerySchemes.find((s) => s.id === id);
-    if (scheme && confirm(`确定要删除方案"${scheme.name}"吗？`)) {
-      deleteScheme(id);
-    }
+    if (!scheme) return;
+
+    const hasDirtyChanges = isSchemeDirty(id);
+    const message = hasDirtyChanges
+      ? `方案"${scheme.name}"有未保存的更改。确定要删除此方案吗？`
+      : `确定要删除方案"${scheme.name}"吗？`;
+
+    setConfirmDialog({
+      action: 'delete_scheme',
+      title: '删除方案',
+      message,
+      confirmText: '删除',
+      cancelText: '取消',
+      confirmType: 'danger',
+      onConfirm: () => {
+        deleteScheme(id);
+        setConfirmDialog(null);
+        addToast('success', '方案已删除');
+      },
+      onCancel: () => setConfirmDialog(null),
+      onClose: () => setConfirmDialog(null),
+    });
   };
 
   const handleDuplicateScheme = (id: string) => {
@@ -191,8 +406,43 @@ export const SchemeOrchestrator: React.FC = () => {
           <h3 className="text-lg font-display font-semibold text-white flex items-center gap-2">
             <LayoutGrid className="w-5 h-5 text-gold" />
             展厅方案编排
+            {currentSchemeId && isSchemeDirty(currentSchemeId) && (
+              <span className="flex items-center gap-1 text-xs text-amber-400 font-normal">
+                <AlertCircle className="w-3.5 h-3.5" />
+                未保存
+              </span>
+            )}
+            {isAutoSaving && (
+              <span className="flex items-center gap-1 text-xs text-blue-400 font-normal">
+                <Save className="w-3.5 h-3.5 animate-pulse" />
+                保存中...
+              </span>
+            )}
+            {!isAutoSaving && lastSavedAt && (
+              <span className="text-xs text-white/40 font-normal">
+                上次保存: {new Date(lastSavedAt).toLocaleTimeString()}
+              </span>
+            )}
           </h3>
           <div className="flex items-center gap-1">
+            {currentSchemeId && isSchemeDirty(currentSchemeId) && (
+              <>
+                <button
+                  onClick={handleDiscardChanges}
+                  className="p-2 text-white/60 hover:text-white transition-colors rounded-lg hover:bg-gallery-hover"
+                  title="放弃更改"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={handleManualSave}
+                  className="p-2 text-gold hover:text-gold-light transition-colors rounded-lg hover:bg-gold/10"
+                  title="保存方案"
+                >
+                  <Save className="w-4 h-4" />
+                </button>
+              </>
+            )}
             <button
               onClick={() => {
                 if (projectIdForProgress) {
@@ -310,13 +560,15 @@ export const SchemeOrchestrator: React.FC = () => {
                         <>
                           <button
                             onClick={() => {
-                              setCurrentScheme(scheme.id);
-                              setShowSchemeDropdown(false);
+                              handleSchemeSwitch(scheme.id);
                             }}
                             className="flex-1 text-left min-w-0"
                           >
-                            <p className="font-medium text-white truncate">
+                            <p className="font-medium text-white truncate flex items-center gap-2">
                               {scheme.name}
+                              {isSchemeDirty(scheme.id) && (
+                                <span className="w-2 h-2 bg-amber-400 rounded-full flex-shrink-0" title="未保存的更改" />
+                              )}
                             </p>
                             <p className="text-xs text-white/50">
                               {scheme.wallArtworks.length} 件作品 ·{' '}
@@ -471,6 +723,35 @@ export const SchemeOrchestrator: React.FC = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <ConfirmDialog
+        isOpen={confirmDialog !== null}
+        title={confirmDialog?.title || ''}
+        message={confirmDialog?.message || ''}
+        confirmText={confirmDialog?.confirmText}
+        cancelText={confirmDialog?.cancelText}
+        confirmType={confirmDialog?.confirmType}
+        onConfirm={confirmDialog?.onConfirm || (() => {})}
+        onCancel={confirmDialog?.onCancel || (() => {})}
+      />
+
+      {showDraftRestoreDialog && (
+        <ConfirmDialog
+          isOpen={true}
+          title="检测到未保存的草稿"
+          message={
+            <div>
+              <p className="mb-2">发现上次编辑时未保存的更改，是否恢复？</p>
+              <p className="text-xs text-white/50">恢复后您可以继续编辑，不恢复则保留当前版本。</p>
+            </div>
+          }
+          confirmText="恢复草稿"
+          cancelText="不恢复"
+          confirmType="primary"
+          onConfirm={handleRestoreDraft}
+          onCancel={() => setShowDraftRestoreDialog(null)}
+        />
+      )}
     </motion.div>
   );
 };
