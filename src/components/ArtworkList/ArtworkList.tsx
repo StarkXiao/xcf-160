@@ -769,11 +769,7 @@ export const ArtworkList: React.FC = () => {
                 {detailTab === 'history' && (
                   <div className="space-y-3">
                     {(() => {
-                      const history = getLightingHistoryForArtwork(selectedInfo.id);
-                      const globalHistory = useAppStore.getState().lightingHistory;
-                      const allHistory = [...globalHistory, ...history]
-                        .sort((a, b) => b.timestamp - a.timestamp)
-                        .slice(0, 10);
+                      const allHistory = getLightingHistoryForArtwork(selectedInfo.id);
 
                       if (allHistory.length === 0) {
                         return (
@@ -782,16 +778,24 @@ export const ArtworkList: React.FC = () => {
                           </div>
                         );
                       }
-                      return allHistory.map((record) => (
+                      return allHistory.map((record: any) => (
                         <div
                           key={record.id}
                           className="p-3 bg-gallery-bg rounded-lg"
                         >
                           <div className="flex items-start justify-between gap-3 mb-2">
-                            <h4 className="text-white font-medium text-sm">
-                              {record.description || '灯光调整'}
-                            </h4>
-                            <span className="text-xs text-white/40 flex items-center gap-1">
+                            <div>
+                              <h4 className="text-white font-medium text-sm">
+                                {record.description || '灯光调整'}
+                              </h4>
+                              {record.schemeName && (
+                                <span className="text-xs text-gold/80 mt-1 flex items-center gap-1">
+                                  <Layers className="w-3 h-3" />
+                                  {record.schemeName}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-xs text-white/40 flex items-center gap-1 flex-shrink-0">
                               <Clock className="w-3 h-3" />
                               {formatDate(record.timestamp)}
                             </span>

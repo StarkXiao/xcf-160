@@ -106,6 +106,7 @@ export interface WallArtwork {
   position: WallPosition;
   lighting: LightingConfig;
   material: MaterialConfig;
+  lightingHistory: LightingHistoryRecord[];
 }
 
 export type LightingStrategyMode = 'uniform' | 'individual' | 'zone';

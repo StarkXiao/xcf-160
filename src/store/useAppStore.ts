@@ -281,7 +281,7 @@ interface AppStore extends AppState {
   addArtworksToScheme: (artworkIds: string[]) => void;
   removeWallArtwork: (wallArtworkId: string) => void;
   updateWallArtworkPosition: (wallArtworkId: string, position: Partial<WallPosition>) => void;
-  updateWallArtworkLighting: (wallArtworkId: string, lighting: Partial<LightingConfig>) => void;
+  updateWallArtworkLighting: (wallArtworkId: string, lighting: Partial<LightingConfig>, options?: { description?: string; source?: LightingHistoryRecord['source'] }) => void;
   updateWallArtworkMaterial: (wallArtworkId: string, material: Partial<MaterialConfig>) => void;
   setLightingStrategy: (strategy: Partial<LightingStrategy>) => void;
   applyLightingStrategyToSelected: () => void;
@@ -1561,8 +1561,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
       const startX = 15 + col * (baseWidth + spacing);
       const startY = 20 + row * (height + spacing);
 
+      const initialLighting = scheme.lightingStrategy.mode === 'uniform'
+        ? { ...scheme.lightingStrategy.globalLighting }
+        : { ...lighting };
+      const now = Date.now();
+
       return {
-        id: `${currentSchemeId}-${artworkId}-${Date.now()}-${index}`,
+        id: `${currentSchemeId}-${artworkId}-${now}-${index}`,
         artworkId,
         position: {
           ...DEFAULT_WALL_POSITION,
@@ -1571,10 +1576,17 @@ export const useAppStore = create<AppStore>((set, get) => ({
           width: baseWidth,
           height,
         },
-        lighting: scheme.lightingStrategy.mode === 'uniform'
-          ? { ...scheme.lightingStrategy.globalLighting }
-          : { ...lighting },
+        lighting: initialLighting,
         material: { ...material },
+        lightingHistory: [
+          {
+            id: `${currentSchemeId}-${artworkId}-${now}-${index}-hist-init`,
+            timestamp: now,
+            lighting: initialLighting,
+            description: '添加作品，初始灯光配置',
+            source: 'user',
+          },
+        ],
       };
     });
 
@@ -1637,21 +1649,34 @@ export const useAppStore = create<AppStore>((set, get) => ({
     get().markSchemeDirty(currentSchemeId);
   },
 
-  updateWallArtworkLighting: (wallArtworkId, lighting) => {
+  updateWallArtworkLighting: (wallArtworkId, lighting, options) => {
     const { currentSchemeId } = get();
     if (!currentSchemeId) return;
 
+    const now = Date.now();
     set((state) => ({
       gallerySchemes: state.gallerySchemes.map((s) =>
         s.id === currentSchemeId
           ? {
               ...s,
-              wallArtworks: s.wallArtworks.map((w) =>
-                w.id === wallArtworkId
-                  ? { ...w, lighting: { ...w.lighting, ...lighting } }
-                  : w
-              ),
-              updatedAt: Date.now(),
+              wallArtworks: s.wallArtworks.map((w) => {
+                if (w.id !== wallArtworkId) return w;
+                const newLighting = { ...w.lighting, ...lighting };
+                const historyRecord: LightingHistoryRecord = {
+                  id: `${wallArtworkId}-hist-${now}`,
+                  timestamp: now,
+                  lighting: newLighting,
+                  description: options?.description || '调整灯光参数',
+                  source: options?.source || 'user',
+                  parameters: lighting,
+                };
+                return {
+                  ...w,
+                  lighting: newLighting,
+                  lightingHistory: [...(w.lightingHistory || []), historyRecord],
+                };
+              }),
+              updatedAt: now,
             }
           : s
       ),
@@ -1710,18 +1735,30 @@ export const useAppStore = create<AppStore>((set, get) => ({
     if (!scheme) return;
 
     const { globalLighting } = scheme.lightingStrategy;
+    const now = Date.now();
 
     set((state) => ({
       gallerySchemes: state.gallerySchemes.map((s) =>
         s.id === currentSchemeId
           ? {
               ...s,
-              wallArtworks: s.wallArtworks.map((w) =>
-                selectedWallArtworkIds.includes(w.id)
-                  ? { ...w, lighting: { ...globalLighting } }
-                  : w
-              ),
-              updatedAt: Date.now(),
+              wallArtworks: s.wallArtworks.map((w) => {
+                if (!selectedWallArtworkIds.includes(w.id)) return w;
+                const historyRecord: LightingHistoryRecord = {
+                  id: `${w.id}-hist-${now}`,
+                  timestamp: now,
+                  lighting: { ...globalLighting },
+                  description: '应用全局灯光策略',
+                  source: 'preset',
+                  parameters: globalLighting,
+                };
+                return {
+                  ...w,
+                  lighting: { ...globalLighting },
+                  lightingHistory: [...(w.lightingHistory || []), historyRecord],
+                };
+              }),
+              updatedAt: now,
             }
           : s
       ),
@@ -3970,7 +4007,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const template = lightingTemplates.find((t) => t.id === templateId);
     if (!template || selectedWallArtworkIds.length === 0) return;
     selectedWallArtworkIds.forEach((wallArtworkId) => {
-      updateWallArtworkLighting(wallArtworkId, template.lighting);
+      updateWallArtworkLighting(wallArtworkId, template.lighting, {
+        description: `应用「${template.name}」模板`,
+        source: 'template',
+      });
     });
     updateLightingTemplate(templateId, { useCount: template.useCount + 1 });
   },
@@ -5809,21 +5849,18 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   getLightingHistoryForArtwork: (artworkId) => {
-    const { gallerySchemes, lightingHistory } = get();
-    const artworkLightingHistory: LightingHistoryRecord[] = [];
+    const { gallerySchemes } = get();
+    const artworkLightingHistory: (LightingHistoryRecord & { schemeName: string })[] = [];
 
     gallerySchemes.forEach((scheme) => {
       scheme.wallArtworks.forEach((wa) => {
-        if (wa.artworkId === artworkId) {
-          const lastHistory = lightingHistory[lightingHistory.length - 1];
-          if (lastHistory) {
+        if (wa.artworkId === artworkId && wa.lightingHistory && wa.lightingHistory.length > 0) {
+          wa.lightingHistory.forEach((record) => {
             artworkLightingHistory.push({
-              ...lastHistory,
-              id: `scheme-${scheme.id}-${wa.id}`,
-              timestamp: scheme.updatedAt,
-              description: `方案「${scheme.name}」中的灯光配置`,
+              ...record,
+              schemeName: scheme.name,
             });
-          }
+          });
         }
       });
     });

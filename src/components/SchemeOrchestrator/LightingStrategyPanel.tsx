@@ -68,7 +68,10 @@ export const LightingStrategyPanel: React.FC = () => {
 
     if (strategy.mode === 'uniform') {
       currentScheme.wallArtworks.forEach((wa) => {
-        updateWallArtworkLighting(wa.id, updates);
+        updateWallArtworkLighting(wa.id, updates, {
+          description: '同步全局灯光策略',
+          source: 'preset',
+        });
       });
     }
   };
@@ -78,7 +81,10 @@ export const LightingStrategyPanel: React.FC = () => {
 
     if (mode === 'uniform') {
       currentScheme.wallArtworks.forEach((wa) => {
-        updateWallArtworkLighting(wa.id, { ...globalLighting });
+        updateWallArtworkLighting(wa.id, { ...globalLighting }, {
+          description: '应用统一灯光模式',
+          source: 'preset',
+        });
       });
     }
   };
