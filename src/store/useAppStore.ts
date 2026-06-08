@@ -563,6 +563,9 @@ interface AppStore extends AppState {
   clearAllSchemeDrafts: () => void;
   getDirtySchemesCount: () => number;
   hasAnyDirtyScheme: () => boolean;
+  getSchemesForArtwork: (artworkId: string) => GalleryScheme[];
+  getLightingHistoryForArtwork: (artworkId: string) => LightingHistoryRecord[];
+  getSimilarArtworks: (artworkId: string, limit?: number) => Artwork[];
 }
 
 const getInitialState = (): AppState => {
@@ -5796,6 +5799,67 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   hasAnyDirtyScheme: () => {
     return get().dirtySchemeIds.size > 0;
+  },
+
+  getSchemesForArtwork: (artworkId) => {
+    const { gallerySchemes } = get();
+    return gallerySchemes.filter((scheme) =>
+      scheme.wallArtworks.some((wa) => wa.artworkId === artworkId)
+    );
+  },
+
+  getLightingHistoryForArtwork: (artworkId) => {
+    const { gallerySchemes, lightingHistory } = get();
+    const artworkLightingHistory: LightingHistoryRecord[] = [];
+
+    gallerySchemes.forEach((scheme) => {
+      scheme.wallArtworks.forEach((wa) => {
+        if (wa.artworkId === artworkId) {
+          const lastHistory = lightingHistory[lightingHistory.length - 1];
+          if (lastHistory) {
+            artworkLightingHistory.push({
+              ...lastHistory,
+              id: `scheme-${scheme.id}-${wa.id}`,
+              timestamp: scheme.updatedAt,
+              description: `方案「${scheme.name}」中的灯光配置`,
+            });
+          }
+        }
+      });
+    });
+
+    return artworkLightingHistory.sort((a, b) => b.timestamp - a.timestamp);
+  },
+
+  getSimilarArtworks: (artworkId, limit = 4) => {
+    const { artworks } = get();
+    const currentArtwork = artworks.find((a) => a.id === artworkId);
+    if (!currentArtwork) return [];
+
+    const scored = artworks
+      .filter((a) => a.id !== artworkId)
+      .map((artwork) => {
+        let score = 0;
+
+        if (artwork.artist === currentArtwork.artist) score += 3;
+
+        if (artwork.medium === currentArtwork.medium) score += 2;
+
+        const commonTags = artwork.tagIds.filter((tid) =>
+          currentArtwork.tagIds.includes(tid)
+        ).length;
+        score += commonTags * 1.5;
+
+        const yearDiff = Math.abs(artwork.year - currentArtwork.year);
+        if (yearDiff <= 10) score += 1;
+        else if (yearDiff <= 25) score += 0.5;
+
+        return { artwork, score };
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
+
+    return scored.map((s) => s.artwork);
   },
 
   setStorageOperationResult: (result) => set({ storageOperationResult: result }),

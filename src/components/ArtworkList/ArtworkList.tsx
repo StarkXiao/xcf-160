@@ -17,12 +17,22 @@ import {
   Filter,
   Check,
   Upload,
+  Layers,
+  History,
+  Lightbulb,
+  Sparkles,
+  ExternalLink,
+  Clock,
+  User,
+  Palette,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
-import type { Artwork, ArtworkTag, ArtworkSortType, ArtworkDeletionValidation } from '../../types';
-import { ARTWORK_SORT_TYPES } from '../../types';
+import type { Artwork, ArtworkTag, ArtworkSortType, ArtworkDeletionValidation, GalleryScheme, LightingTemplate, LightingHistoryRecord, LightingRecommendation } from '../../types';
+import { ARTWORK_SORT_TYPES, LIGHT_TYPE_LABELS } from '../../types';
 
 export const ArtworkList: React.FC = () => {
+  type DetailTab = 'info' | 'schemes' | 'history' | 'templates' | 'similar';
+
   const {
     artworkTags,
     selectedArtworkId,
@@ -44,10 +54,20 @@ export const ArtworkList: React.FC = () => {
     batchRemoveArtworks,
     batchImportArtworks,
     updateArtworkWithTags,
+    getSchemesForArtwork,
+    getLightingHistoryForArtwork,
+    getSimilarArtworks,
+    getLightingTemplatesByArtwork,
+    getLightingRecommendations,
+    setCurrentScheme,
+    setCurrentProject,
+    setAppMode,
+    setShowCuratorHub,
   } = useAppStore();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedInfo, setSelectedInfo] = useState<Artwork | null>(null);
+  const [detailTab, setDetailTab] = useState<DetailTab>('info');
   const [isBatchMode, setIsBatchMode] = useState(false);
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [showTagFilter, setShowTagFilter] = useState(false);
@@ -204,6 +224,42 @@ export const ArtworkList: React.FC = () => {
     }
     return <ArrowDown className="w-3 h-3" />;
   };
+
+  const formatDate = (timestamp: number) => {
+    return new Date(timestamp).toLocaleDateString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const handleSchemeClick = (scheme: GalleryScheme) => {
+    setAppMode('curator');
+    setCurrentScheme(scheme.id);
+    const project = useAppStore.getState().curatorProjects.find((p) =>
+      p.schemeIds.includes(scheme.id)
+    );
+    if (project) {
+      setCurrentProject(project.id);
+    }
+    setShowCuratorHub(true);
+    setSelectedInfo(null);
+  };
+
+  const handleArtworkClick = (artwork: Artwork) => {
+    setSelectedInfo(artwork);
+    setDetailTab('info');
+  };
+
+  const detailTabs: { id: DetailTab; label: string; icon: React.ReactNode }[] = [
+    { id: 'info', label: '基本信息', icon: <Info className="w-3.5 h-3.5" /> },
+    { id: 'schemes', label: '关联方案', icon: <Layers className="w-3.5 h-3.5" /> },
+    { id: 'history', label: '调整记录', icon: <History className="w-3.5 h-3.5" /> },
+    { id: 'templates', label: '灯光模板', icon: <Lightbulb className="w-3.5 h-3.5" /> },
+    { id: 'similar', label: '相似作品', icon: <Sparkles className="w-3.5 h-3.5" /> },
+  ];
 
   return (
     <div className="h-full flex flex-col bg-gallery-surface border-r border-gallery-border">
@@ -538,69 +594,424 @@ export const ArtworkList: React.FC = () => {
               initial={{ scale: 0.95, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.95, y: 20 }}
-              className="card p-6 max-w-md w-full"
+              className="card p-0 max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="aspect-video rounded-lg overflow-hidden mb-4 bg-gallery-bg">
-                <img
-                  src={selectedInfo.imageUrl}
-                  alt={selectedInfo.title}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <h3 className="text-xl font-display font-semibold text-white mb-1">
-                {selectedInfo.title}
-              </h3>
-              <p className="text-gold mb-3">{selectedInfo.artist}</p>
-              <div className="space-y-2 text-sm text-white/70">
-                <p>
-                  <span className="text-white/40">年份：</span>
-                  {selectedInfo.year}
-                </p>
-                <p>
-                  <span className="text-white/40">材质：</span>
-                  {selectedInfo.medium}
-                </p>
-                <p>
-                  <span className="text-white/40">尺寸：</span>
-                  {selectedInfo.width} × {selectedInfo.height} cm
-                </p>
-                {selectedInfo.tagIds.length > 0 && (
-                  <div className="mt-2">
-                    <span className="text-white/40 mr-2">标签：</span>
-                    <div className="inline-flex flex-wrap gap-1.5 mt-1">
-                      {selectedInfo.tagIds.map((tagId) => {
-                        const tag = getTagById(tagId);
-                        if (!tag) return null;
-                        return (
-                          <span
-                            key={tagId}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full"
-                            style={{
-                              backgroundColor: `${tag.color}20`,
-                              color: tag.color,
-                            }}
-                          >
-                            <Tag className="w-3 h-3" />
-                            {tag.name}
-                          </span>
-                        );
-                      })}
+              <div className="p-6 border-b border-gallery-border">
+                <div className="flex gap-4">
+                  <div className="w-24 h-24 rounded-lg overflow-hidden bg-gallery-bg flex-shrink-0">
+                    <img
+                      src={selectedInfo.imageUrl}
+                      alt={selectedInfo.title}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h3 className="text-xl font-display font-semibold text-white mb-1 truncate">
+                          {selectedInfo.title}
+                        </h3>
+                        <p className="text-gold">{selectedInfo.artist}</p>
+                      </div>
+                      <button
+                        onClick={() => setSelectedInfo(null)}
+                        className="p-1 hover:bg-gallery-bg rounded transition-colors flex-shrink-0"
+                      >
+                        <X className="w-5 h-5 text-white/40" />
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-2 mt-2 text-xs text-white/60">
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        {selectedInfo.year}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Palette className="w-3 h-3" />
+                        {selectedInfo.medium}
+                      </span>
+                      <span>
+                        {selectedInfo.width} × {selectedInfo.height} cm
+                      </span>
                     </div>
                   </div>
+                </div>
+              </div>
+
+              <div className="border-b border-gallery-border">
+                <div className="flex overflow-x-auto">
+                  {detailTabs.map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setDetailTab(tab.id)}
+                      className={`px-4 py-2.5 text-xs font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 border-b-2 ${
+                        detailTab === tab.id
+                          ? 'text-gold border-gold'
+                          : 'text-white/50 border-transparent hover:text-white/70'
+                      }`}
+                    >
+                      {tab.icon}
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6">
+                {detailTab === 'info' && (
+                  <div className="space-y-4 text-sm text-white/70">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <span className="text-white/40 block mb-1">艺术家</span>
+                        <span className="text-white flex items-center gap-1.5">
+                          <User className="w-3.5 h-3.5 text-gold" />
+                          {selectedInfo.artist}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-white/40 block mb-1">创作年份</span>
+                        <span className="text-white">{selectedInfo.year}</span>
+                      </div>
+                      <div>
+                        <span className="text-white/40 block mb-1">创作媒介</span>
+                        <span className="text-white">{selectedInfo.medium}</span>
+                      </div>
+                      <div>
+                        <span className="text-white/40 block mb-1">作品尺寸</span>
+                        <span className="text-white">
+                          {selectedInfo.width} × {selectedInfo.height} cm
+                        </span>
+                      </div>
+                    </div>
+
+                    {selectedInfo.tagIds.length > 0 && (
+                      <div>
+                        <span className="text-white/40 block mb-2">标签</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {selectedInfo.tagIds.map((tagId) => {
+                            const tag = getTagById(tagId);
+                            if (!tag) return null;
+                            return (
+                              <span
+                                key={tagId}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full"
+                                style={{
+                                  backgroundColor: `${tag.color}20`,
+                                  color: tag.color,
+                                }}
+                              >
+                                <Tag className="w-3 h-3" />
+                                {tag.name}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedInfo.description && (
+                      <div className="pt-4 border-t border-gallery-border">
+                        <span className="text-white/40 block mb-2">作品描述</span>
+                        <p className="text-white/80 leading-relaxed">
+                          {selectedInfo.description}
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 )}
-                {selectedInfo.description && (
-                  <p className="mt-4 pt-4 border-t border-gallery-border">
-                    {selectedInfo.description}
-                  </p>
+
+                {detailTab === 'schemes' && (
+                  <div className="space-y-3">
+                    {(() => {
+                      const schemes = getSchemesForArtwork(selectedInfo.id);
+                      if (schemes.length === 0) {
+                        return (
+                          <div className="text-center py-8 text-white/40 text-sm">
+                            该作品暂无关联方案
+                          </div>
+                        );
+                      }
+                      return schemes.map((scheme) => (
+                        <div
+                          key={scheme.id}
+                          className="p-3 bg-gallery-bg rounded-lg hover:bg-gallery-hover transition-colors cursor-pointer group"
+                          onClick={() => handleSchemeClick(scheme)}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <h4 className="text-white font-medium mb-1 flex items-center gap-2">
+                                {scheme.name}
+                                <ExternalLink className="w-3.5 h-3.5 text-white/30 opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </h4>
+                              {scheme.description && (
+                                <p className="text-xs text-white/50 line-clamp-2 mb-2">
+                                  {scheme.description}
+                                </p>
+                              )}
+                              <div className="flex items-center gap-3 text-xs text-white/40">
+                                <span className="flex items-center gap-1">
+                                  <Layers className="w-3 h-3" />
+                                  {scheme.wallArtworks.length} 件作品
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  更新于 {formatDate(scheme.updatedAt)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                )}
+
+                {detailTab === 'history' && (
+                  <div className="space-y-3">
+                    {(() => {
+                      const history = getLightingHistoryForArtwork(selectedInfo.id);
+                      const globalHistory = useAppStore.getState().lightingHistory;
+                      const allHistory = [...globalHistory, ...history]
+                        .sort((a, b) => b.timestamp - a.timestamp)
+                        .slice(0, 10);
+
+                      if (allHistory.length === 0) {
+                        return (
+                          <div className="text-center py-8 text-white/40 text-sm">
+                            该作品暂无调整记录
+                          </div>
+                        );
+                      }
+                      return allHistory.map((record) => (
+                        <div
+                          key={record.id}
+                          className="p-3 bg-gallery-bg rounded-lg"
+                        >
+                          <div className="flex items-start justify-between gap-3 mb-2">
+                            <h4 className="text-white font-medium text-sm">
+                              {record.description || '灯光调整'}
+                            </h4>
+                            <span className="text-xs text-white/40 flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {formatDate(record.timestamp)}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2 text-xs">
+                            <div className="p-2 bg-gallery-surface rounded">
+                              <span className="text-white/40 block mb-0.5">类型</span>
+                              <span className="text-white">
+                                {LIGHT_TYPE_LABELS[record.lighting.type]}
+                              </span>
+                            </div>
+                            <div className="p-2 bg-gallery-surface rounded">
+                              <span className="text-white/40 block mb-0.5">色温</span>
+                              <span className="text-white">
+                                {record.lighting.colorTemperature}K
+                              </span>
+                            </div>
+                            <div className="p-2 bg-gallery-surface rounded">
+                              <span className="text-white/40 block mb-0.5">亮度</span>
+                              <span className="text-white">
+                                {Math.round(record.lighting.intensity * 100)}%
+                              </span>
+                            </div>
+                          </div>
+                          {record.source && (
+                            <div className="mt-2 text-xs text-white/50">
+                              来源：{
+                                record.source === 'user' ? '用户调整' :
+                                record.source === 'preset' ? '预设应用' :
+                                record.source === 'recommendation' ? '推荐方案' :
+                                record.source === 'template' ? '模板应用' : '重置'
+                              }
+                            </div>
+                          )}
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                )}
+
+                {detailTab === 'templates' && (
+                  <div className="space-y-3">
+                    {(() => {
+                      const templates = getLightingTemplatesByArtwork(selectedInfo.id);
+                      const recommendations = getLightingRecommendations(selectedInfo.medium);
+
+                      const allItems = [
+                        ...templates.map((t) => ({ ...t, isTemplate: true, confidence: 1 })),
+                        ...recommendations.slice(0, 3).map((r) => ({
+                          ...r,
+                          isTemplate: false,
+                          id: r.id,
+                          name: r.name,
+                          lighting: { ...useAppStore.getState().lighting, ...r.lighting },
+                          tags: r.tags,
+                          confidence: r.confidence,
+                        })),
+                      ];
+
+                      if (allItems.length === 0) {
+                        return (
+                          <div className="text-center py-8 text-white/40 text-sm">
+                            暂无推荐灯光模板
+                          </div>
+                        );
+                      }
+                      return allItems.map((item: any) => (
+                        <div
+                          key={item.id}
+                          className="p-3 bg-gallery-bg rounded-lg hover:bg-gallery-hover transition-colors"
+                        >
+                          <div className="flex items-start justify-between gap-3 mb-2">
+                            <div>
+                              <h4 className="text-white font-medium text-sm flex items-center gap-2">
+                                <Lightbulb className="w-3.5 h-3.5 text-gold" />
+                                {item.name}
+                                {item.isTemplate ? (
+                                  <span className="text-[10px] px-1.5 py-0.5 bg-gold/20 text-gold rounded">
+                                    模板
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded">
+                                    推荐
+                                  </span>
+                                )}
+                              </h4>
+                              {item.matchReason && (
+                                <p className="text-xs text-white/50 mt-1">
+                                  {item.matchReason}
+                                </p>
+                              )}
+                              {item.description && (
+                                <p className="text-xs text-white/50 mt-1">
+                                  {item.description}
+                                </p>
+                              )}
+                            </div>
+                            {item.confidence && (
+                              <div className="text-right">
+                                <span className="text-xs text-gold font-medium">
+                                  {Math.round(item.confidence * 100)}%
+                                </span>
+                                <span className="text-[10px] text-white/40 block">
+                                  匹配度
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-3 gap-2 text-xs">
+                            <div className="p-2 bg-gallery-surface rounded">
+                              <span className="text-white/40 block mb-0.5">类型</span>
+                              <span className="text-white">
+                                {LIGHT_TYPE_LABELS[item.lighting.type]}
+                              </span>
+                            </div>
+                            <div className="p-2 bg-gallery-surface rounded">
+                              <span className="text-white/40 block mb-0.5">色温</span>
+                              <span className="text-white">
+                                {item.lighting.colorTemperature}K
+                              </span>
+                            </div>
+                            <div className="p-2 bg-gallery-surface rounded">
+                              <span className="text-white/40 block mb-0.5">亮度</span>
+                              <span className="text-white">
+                                {Math.round(item.lighting.intensity * 100)}%
+                              </span>
+                            </div>
+                          </div>
+                          {item.tags && item.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                              {item.tags.slice(0, 3).map((tag: string, i: number) => (
+                                <span
+                                  key={i}
+                                  className="text-[10px] px-1.5 py-0.5 bg-white/10 text-white/60 rounded"
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                )}
+
+                {detailTab === 'similar' && (
+                  <div className="space-y-3">
+                    {(() => {
+                      const similar = getSimilarArtworks(selectedInfo.id, 6);
+                      if (similar.length === 0) {
+                        return (
+                          <div className="text-center py-8 text-white/40 text-sm">
+                            暂无相似作品
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="grid grid-cols-2 gap-3">
+                          {similar.map((artwork) => (
+                            <div
+                              key={artwork.id}
+                              className="p-2 bg-gallery-bg rounded-lg hover:bg-gallery-hover transition-colors cursor-pointer group"
+                              onClick={() => handleArtworkClick(artwork)}
+                            >
+                              <div className="aspect-square rounded overflow-hidden bg-gallery-surface mb-2">
+                                <img
+                                  src={artwork.imageUrl}
+                                  alt={artwork.title}
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                              <h4 className="text-white text-sm font-medium truncate">
+                                {artwork.title}
+                              </h4>
+                              <p className="text-xs text-gold truncate">
+                                {artwork.artist}
+                              </p>
+                              <div className="flex items-center gap-2 mt-1 text-[10px] text-white/40">
+                                <span>{artwork.year}</span>
+                                <span>·</span>
+                                <span className="truncate">{artwork.medium}</span>
+                              </div>
+                              {artwork.tagIds.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-2">
+                                  {artwork.tagIds.slice(0, 2).map((tagId) => {
+                                    const tag = getTagById(tagId);
+                                    if (!tag) return null;
+                                    return (
+                                      <span
+                                        key={tagId}
+                                        className="text-[10px] px-1 py-0.5 rounded-full"
+                                        style={{
+                                          backgroundColor: `${tag.color}20`,
+                                          color: tag.color,
+                                        }}
+                                      >
+                                        {tag.name}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
                 )}
               </div>
-              <button
-                onClick={() => setSelectedInfo(null)}
-                className="mt-6 w-full btn-primary"
-              >
-                关闭
-              </button>
+
+              <div className="p-4 border-t border-gallery-border">
+                <button
+                  onClick={() => setSelectedInfo(null)}
+                  className="w-full btn-secondary"
+                >
+                  关闭
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}
