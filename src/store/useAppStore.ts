@@ -1295,7 +1295,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   savePreset: (name) => {
     const { selectedArtworkId, lighting, material, presets, selectedPresetGroupId, artworks } = get();
-    if (!selectedArtworkId) return;
+    if (!selectedArtworkId) {
+      get().showErrorToast('请先选择作品');
+      return;
+    }
 
     const artwork = artworks.find((a) => a.id === selectedArtworkId);
     const now = Date.now();
@@ -1321,10 +1324,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
     if (selectedPresetGroupId) {
       get().addPresetToGroup(selectedPresetGroupId, newPreset.id);
     }
+
+    get().showSuccessToast(`已保存预设：${name}`);
   },
 
   deletePreset: (id) => {
     const { presets, compareList, presetGroups } = get();
+    const preset = presets.find((p) => p.id === id);
     const newPresets = presets.filter((p) => p.id !== id);
     const newCompareList = compareList.filter((pid) => pid !== id);
     set({ presets: newPresets, compareList: newCompareList });
@@ -1340,15 +1346,24 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
     const recentIds = loadRecentlyUsedPresetIds().filter((rid) => rid !== id);
     saveRecentlyUsedPresetIds(recentIds);
+
+    if (preset) {
+      get().showSuccessToast(`已删除预设：${preset.name}`);
+    }
   },
 
   updatePreset: (id, updates) => {
     const { presets } = get();
+    const preset = presets.find((p) => p.id === id);
     const newPresets = presets.map((p) =>
       p.id === id ? { ...p, ...updates, updatedAt: Date.now() } : p
     );
     set({ presets: newPresets });
     savePresets(newPresets);
+
+    if (preset && updates.name) {
+      get().showSuccessToast(`已更新预设：${updates.name}`);
+    }
   },
 
   duplicatePreset: (id, newName) => {
@@ -1357,10 +1372,11 @@ export const useAppStore = create<AppStore>((set, get) => ({
     if (!preset) return preset as Preset;
 
     const now = Date.now();
+    const duplicatedName = newName || `${preset.name} (副本)`;
     const duplicated: Preset = {
       ...preset,
       id: `preset-${now}`,
-      name: newName || `${preset.name} (副本)`,
+      name: duplicatedName,
       useCount: 0,
       createdAt: now,
       updatedAt: now,
@@ -1370,14 +1386,35 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const newPresets = [...presets, duplicated];
     set({ presets: newPresets });
     savePresets(newPresets);
+
+    get().showSuccessToast(`已复制预设：${duplicatedName}`);
     return duplicated;
   },
 
   loadPreset: (preset) => {
-    set({
-      selectedArtworkId: preset.artworkId,
-      lighting: { ...preset.lighting },
-      material: { ...preset.material },
+    set((state) => {
+      const artwork = preset.artworkId ? state.artworks.find((a) => a.id === preset.artworkId) || null : null;
+      const newSchemeSource = {
+        type: 'preset' as SchemeSourceType,
+        id: preset.id,
+        name: preset.name,
+        appliedAt: Date.now(),
+      };
+      const newDirtyFields = [...new Set([...state.homeState.dirtyFields, 'lighting', 'material', 'artworks'])];
+
+      return {
+        selectedArtworkId: preset.artworkId,
+        lighting: { ...preset.lighting },
+        material: { ...preset.material },
+        schemeSource: newSchemeSource,
+        homeState: {
+          ...state.homeState,
+          currentArtwork: artwork,
+          schemeSource: newSchemeSource,
+          isDirty: true,
+          dirtyFields: newDirtyFields,
+        },
+      };
     });
     saveLastArtwork(preset.artworkId);
     saveLastLighting(preset.lighting);
@@ -1396,6 +1433,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const recentIds = loadRecentlyUsedPresetIds().filter((rid) => rid !== preset.id);
     recentIds.unshift(preset.id);
     saveRecentlyUsedPresetIds(recentIds.slice(0, 20));
+
+    get().showSuccessToast(`已加载预设：${preset.name}`);
   },
 
   copyPresetToClipboard: async (id) => {
