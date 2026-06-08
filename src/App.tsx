@@ -19,11 +19,13 @@ import {
   BookOpen,
   Building2,
   HardDrive,
+  Home as HomeIcon,
 } from 'lucide-react';
 import { useAppStore } from './store/useAppStore';
 import { ToastProvider, ToastContainer, useToast } from './components/Toast';
 import { initStorageSystem, checkStorageHealth, getStorageMetadata, loadBackups } from './utils/storage';
 import type { AutoRecoveryResult, DataMigrationResult } from './types';
+import Home from './pages/Home';
 import { ArtworkList } from './components/ArtworkList/ArtworkList';
 import { GalleryPreview } from './components/GalleryPreview/GalleryPreview';
 import { GalleryWallPreview } from './components/GalleryPreview/GalleryWallPreview';
@@ -44,6 +46,7 @@ import { APP_MODE_LABELS, PROJECT_STATUS_LABELS } from './types';
 type PanelTab = AppState['activePanel'];
 
 const tabs: { id: PanelTab; label: string; icon: React.ReactNode }[] = [
+  { id: 'home', label: '首页', icon: <HomeIcon className="w-4 h-4" /> },
   { id: 'scheme', label: '方案编排', icon: <LayoutGrid className="w-4 h-4" /> },
   { id: 'wallConfig', label: '展墙', icon: <Grid3X3 className="w-4 h-4" /> },
   { id: 'lighting', label: '灯光', icon: <Lightbulb className="w-4 h-4" /> },
@@ -56,6 +59,7 @@ const tabs: { id: PanelTab; label: string; icon: React.ReactNode }[] = [
 ];
 
 const artworkModeTabs: { id: PanelTab; label: string; icon: React.ReactNode }[] = [
+  { id: 'home', label: '首页', icon: <HomeIcon className="w-4 h-4" /> },
   { id: 'wallConfig', label: '展墙', icon: <Grid3X3 className="w-4 h-4" /> },
   { id: 'lighting', label: '灯光', icon: <Lightbulb className="w-4 h-4" /> },
   { id: 'material', label: '材质', icon: <Layers className="w-4 h-4" /> },
@@ -87,6 +91,8 @@ function AppContent() {
     hasAnyDirtyScheme,
     getDirtySchemesCount,
     saveCurrentSchemeDraft,
+    homeState,
+    removeOperationFeedback,
   } = useAppStore();
   const { addToast } = useToast();
   const [leftCollapsed, setLeftCollapsed] = useState(false);
@@ -167,6 +173,16 @@ function AppContent() {
       setShareToken(share);
     }
   }, []);
+
+  useEffect(() => {
+    const feedbacks = homeState.pendingFeedbacks;
+    if (feedbacks.length > 0) {
+      feedbacks.forEach((feedback) => {
+        addToast(feedback.type, feedback.message, feedback.duration);
+        removeOperationFeedback(feedback.id);
+      });
+    }
+  }, [homeState.pendingFeedbacks, addToast, removeOperationFeedback]);
 
   useEffect(() => {
     if (storageInitRef.current) return;
@@ -256,6 +272,8 @@ function AppContent() {
 
   const renderPanel = () => {
     switch (activePanel) {
+      case 'home':
+        return <Home />;
       case 'scheme':
         return <SchemeOrchestrator />;
       case 'wallConfig':
@@ -275,13 +293,13 @@ function AppContent() {
       case 'tourAdaptation':
         return <TourAdaptationPanel />;
       default:
-        return appMode === 'curator' ? <SchemeOrchestrator /> : <LightingPanel />;
+        return <Home />;
     }
   };
 
   const handleModeSwitch = (mode: AppMode) => {
     setAppMode(mode);
-    setActivePanel(mode === 'curator' ? 'scheme' : 'lighting');
+    setActivePanel('home');
     setShowModeDropdown(false);
   };
 

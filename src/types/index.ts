@@ -1104,6 +1104,8 @@ export interface AppState {
   storageOperationResult: StorageOperationResult | null;
   dirtySchemeIds: Set<string>;
   schemeSnapshots: Record<string, GalleryScheme>;
+  schemeSource: SchemeSource | null;
+  homeState: HomeState;
 }
 
 export type StorageOperationType =
@@ -1238,7 +1240,7 @@ export interface ThemeCollection {
   updatedAt: number;
 }
 
-export type ActivePanel = 'lighting' | 'material' | 'compare' | 'storage' | 'scheme' | 'workstation' | 'wallConfig' | 'themeLibrary' | 'lightingTemplates' | 'materialCombos' | 'sceneRecommendations' | 'tourAdaptation';
+export type ActivePanel = 'home' | 'lighting' | 'material' | 'compare' | 'storage' | 'scheme' | 'workstation' | 'wallConfig' | 'themeLibrary' | 'lightingTemplates' | 'materialCombos' | 'sceneRecommendations' | 'tourAdaptation';
 
 export type ThemeLibraryTab = 'collections' | 'lighting' | 'materials' | 'scenes' | 'presetMarket';
 
@@ -3038,4 +3040,79 @@ export const EXPORT_SCOPE_LABELS: Record<ExportScope, string> = {
   projects: '仅策展项目',
   templates: '仅模板配置',
   custom: '自定义选择',
+};
+
+export type SchemeSourceType =
+  | 'user'
+  | 'preset'
+  | 'template'
+  | 'recommendation'
+  | 'combo'
+  | 'theme'
+  | 'scene'
+  | 'import';
+
+export interface SchemeSource {
+  type: SchemeSourceType;
+  id: string;
+  name: string;
+  appliedAt: number;
+  metadata?: Record<string, unknown>;
+}
+
+export const SCHEME_SOURCE_TYPE_LABELS: Record<SchemeSourceType, string> = {
+  user: '用户自定义',
+  preset: '预设方案',
+  template: '灯光模板',
+  recommendation: '智能推荐',
+  combo: '材质组合',
+  theme: '主题馆藏',
+  scene: '场景推荐',
+  import: '导入配置',
+};
+
+export const SCHEME_SOURCE_TYPE_ICONS: Record<SchemeSourceType, string> = {
+  user: 'User',
+  preset: 'Bookmark',
+  template: 'Lightbulb',
+  recommendation: 'Sparkles',
+  combo: 'Palette',
+  theme: 'Layers',
+  scene: 'LayoutGrid',
+  import: 'Download',
+};
+
+export interface OperationFeedback {
+  id: string;
+  type: 'success' | 'error' | 'warning' | 'info';
+  title: string;
+  message: string;
+  duration?: number;
+  action?: {
+    label: string;
+    onClick: () => void;
+  };
+  timestamp: number;
+}
+
+export interface HomeState {
+  currentArtwork: Artwork | null;
+  currentScheme: GalleryScheme | null;
+  currentProject: CuratorProject | null;
+  schemeSource: SchemeSource | null;
+  isDirty: boolean;
+  dirtyFields: string[];
+  lastSavedAt: number | null;
+  pendingFeedbacks: OperationFeedback[];
+}
+
+export const DEFAULT_HOME_STATE: HomeState = {
+  currentArtwork: null,
+  currentScheme: null,
+  currentProject: null,
+  schemeSource: null,
+  isDirty: false,
+  dirtyFields: [],
+  lastSavedAt: null,
+  pendingFeedbacks: [],
 };

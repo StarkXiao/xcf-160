@@ -100,6 +100,13 @@ import type {
   StorageOperationType,
   SchemeDraft,
   DirtyCheckResult,
+  SchemeSource,
+  SchemeSourceType,
+  OperationFeedback,
+  HomeState,
+} from '../types';
+import {
+  DEFAULT_HOME_STATE,
 } from '../types';
 import {
   DEFAULT_LIGHTING,
@@ -252,8 +259,8 @@ import {
 
 interface AppStore extends AppState {
   setSelectedArtwork: (id: string | null) => void;
-  setLighting: (lighting: Partial<LightingConfig>, skipHistory?: boolean) => void;
-  setMaterial: (material: Partial<MaterialConfig>) => void;
+  setLighting: (lighting: Partial<LightingConfig>, skipHistory?: boolean, sourceInfo?: { type: SchemeSourceType; id: string; name: string }) => void;
+  setMaterial: (material: Partial<MaterialConfig>, sourceInfo?: { type: SchemeSourceType; id: string; name: string }) => void;
   setActivePanel: (panel: AppState['activePanel']) => void;
   undoLighting: () => void;
   redoLighting: () => void;
@@ -566,6 +573,21 @@ interface AppStore extends AppState {
   getSchemesForArtwork: (artworkId: string) => GalleryScheme[];
   getLightingHistoryForArtwork: (artworkId: string) => LightingHistoryRecord[];
   getSimilarArtworks: (artworkId: string, limit?: number) => Artwork[];
+  setSchemeSource: (source: SchemeSource | null) => void;
+  addOperationFeedback: (feedback: Omit<OperationFeedback, 'id' | 'timestamp'>) => string;
+  removeOperationFeedback: (id: string) => void;
+  clearOperationFeedbacks: () => void;
+  updateHomeState: (updates: Partial<HomeState>) => void;
+  markCurrentDirty: (fields?: string[]) => void;
+  clearCurrentDirty: () => void;
+  getCurrentArtwork: () => Artwork | null;
+  getCurrentScheme: () => GalleryScheme | null;
+  getCurrentProject: () => CuratorProject | null;
+  showToast: (type: 'success' | 'error' | 'warning' | 'info', message: string, duration?: number) => void;
+  showSuccessToast: (message: string, duration?: number) => void;
+  showErrorToast: (message: string, duration?: number) => void;
+  showWarningToast: (message: string, duration?: number) => void;
+  showInfoToast: (message: string, duration?: number) => void;
 }
 
 const getInitialState = (): AppState => {
@@ -655,7 +677,7 @@ const getInitialState = (): AppState => {
     presetSearchQuery: '',
     presetSortType: 'lastUsedAt',
     compareList: [],
-    activePanel: 'themeLibrary',
+    activePanel: 'home',
     gallerySchemes: schemes,
     currentSchemeId,
     selectedWallArtworkIds: [],
@@ -722,6 +744,8 @@ const getInitialState = (): AppState => {
     storageOperationResult: null,
     dirtySchemeIds: new Set<string>(),
     schemeSnapshots: {},
+    schemeSource: null,
+    homeState: { ...DEFAULT_HOME_STATE },
   };
 };
 
@@ -738,7 +762,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     if (id) saveLastArtwork(id);
   },
 
-  setLighting: (lighting, skipHistory = false) => {
+  setLighting: (lighting, skipHistory = false, sourceInfo?: { type: SchemeSourceType; id: string; name: string }) => {
     set((state) => {
       const currentType = lighting.type || state.lighting.type;
       const constraint = LIGHTING_PARAMETER_CONSTRAINTS[currentType];
@@ -798,10 +822,31 @@ export const useAppStore = create<AppStore>((set, get) => ({
         newHistory.shift();
       }
 
+      const newSchemeSource = sourceInfo ? {
+        type: sourceInfo.type,
+        id: sourceInfo.id,
+        name: sourceInfo.name,
+        appliedAt: Date.now(),
+      } : state.schemeSource?.type === 'user' ? state.schemeSource : {
+        type: 'user' as SchemeSourceType,
+        id: 'user',
+        name: '用户自定义',
+        appliedAt: Date.now(),
+      };
+
+      const newDirtyFields = [...new Set([...state.homeState.dirtyFields, 'lighting'])];
+
       return {
         lighting: updatedLighting,
         lightingHistory: newHistory,
         lightingHistoryIndex: newHistory.length - 1,
+        schemeSource: newSchemeSource,
+        homeState: {
+          ...state.homeState,
+          schemeSource: newSchemeSource,
+          isDirty: true,
+          dirtyFields: newDirtyFields,
+        },
       };
     });
   },
@@ -892,7 +937,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   applyLightingRecommendation: (recommendation) => {
-    get().setLighting(recommendation.lighting);
+    get().setLighting(recommendation.lighting, false, {
+      type: 'recommendation',
+      id: recommendation.id,
+      name: recommendation.name,
+    });
+    get().showSuccessToast(`已应用推荐方案：${recommendation.name}`);
   },
 
   canUndoLighting: () => {
@@ -1042,12 +1092,17 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const { lightingPresets } = get();
     const preset = lightingPresets.find((p) => p.id === id);
     if (!preset) return;
-    get().setLighting(preset.lighting);
+    get().setLighting(preset.lighting, false, {
+      type: 'preset',
+      id: preset.id,
+      name: preset.name,
+    });
     const newPresets = lightingPresets.map((p) =>
       p.id === id ? { ...p, useCount: p.useCount + 1, updatedAt: Date.now() } : p
     );
     set({ lightingPresets: newPresets });
     saveLightingPresets(newPresets);
+    get().showSuccessToast(`已应用预设：${preset.name}`);
   },
 
   toggleLightingPresetFavorite: (id) => {
@@ -1079,7 +1134,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     return filtered.sort((a, b) => b.updatedAt - a.updatedAt);
   },
 
-  setMaterial: (material) => {
+  setMaterial: (material, sourceInfo?: { type: SchemeSourceType; id: string; name: string }) => {
     set((state) => {
       const validation = validateMaterialConfig(material, state.material);
       let newMaterial = { ...state.material, ...material };
@@ -1096,9 +1151,31 @@ export const useAppStore = create<AppStore>((set, get) => ({
       newMaterial = { ...newMaterial, ...clamped };
 
       saveLastMaterial(newMaterial);
+
+      const newSchemeSource = sourceInfo ? {
+        type: sourceInfo.type,
+        id: sourceInfo.id,
+        name: sourceInfo.name,
+        appliedAt: Date.now(),
+      } : state.schemeSource?.type === 'user' ? state.schemeSource : {
+        type: 'user' as SchemeSourceType,
+        id: 'user',
+        name: '用户自定义',
+        appliedAt: Date.now(),
+      };
+
+      const newDirtyFields = [...new Set([...state.homeState.dirtyFields, 'material'])];
+
       return {
         material: newMaterial,
         materialValidationWarnings: validation.warnings,
+        schemeSource: newSchemeSource,
+        homeState: {
+          ...state.homeState,
+          schemeSource: newSchemeSource,
+          isDirty: true,
+          dirtyFields: newDirtyFields,
+        },
       };
     });
   },
@@ -1124,7 +1201,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   applyMaterialRecommendation: (recommendation) => {
-    get().setMaterial(recommendation.material);
+    get().setMaterial(recommendation.material, {
+      type: 'recommendation',
+      id: recommendation.id,
+      name: recommendation.name,
+    });
+    get().showSuccessToast(`已应用材质推荐：${recommendation.name}`);
   },
 
   toggleMaterialComboFavorite: (comboId, name) => {
@@ -3998,8 +4080,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const { lightingTemplates, setLighting, updateLightingTemplate } = get();
     const template = lightingTemplates.find((t) => t.id === id);
     if (!template) return;
-    setLighting(template.lighting);
+    setLighting(template.lighting, false, {
+      type: 'template',
+      id: template.id,
+      name: template.name,
+    });
     updateLightingTemplate(id, { useCount: template.useCount + 1 });
+    get().showSuccessToast(`已应用灯光模板：${template.name}`);
   },
 
   applyLightingTemplateToSelectedWallArtworks: (templateId) => {
@@ -4072,9 +4159,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const { materialCombos, setMaterial, updateMaterialCombo } = get();
     const combo = materialCombos.find((c) => c.id === id);
     if (!combo) return;
-    setMaterial(combo.material);
+    setMaterial(combo.material, {
+      type: 'combo',
+      id: combo.id,
+      name: combo.name,
+    });
     updateMaterialCombo(id, { useCount: combo.useCount + 1 });
     incrementMaterialComboFavoriteUse(id);
+    get().showSuccessToast(`已应用材质组合：${combo.name}`);
   },
 
   applyMaterialComboToSelectedWallArtworks: (comboId) => {
@@ -4138,7 +4230,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   applySceneRecommendation: (id) => {
-    const { sceneRecommendations, lightingTemplates, materialCombos, applyLightingTemplate, applyMaterialCombo } = get();
+    const { sceneRecommendations, applyLightingTemplate, applyMaterialCombo, setSchemeSource } = get();
     const scene = sceneRecommendations.find((s) => s.id === id);
     if (!scene) return;
     if (scene.suggestedLightingTemplateId) {
@@ -4150,6 +4242,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
     if (scene.artworkIds.length > 0) {
       get().addArtworksToScheme(scene.artworkIds);
     }
+    setSchemeSource({
+      type: 'scene',
+      id: scene.id,
+      name: scene.name,
+      appliedAt: Date.now(),
+    });
+    get().showSuccessToast(`已应用场景推荐：${scene.name}`);
   },
 
   selectSceneRecommendation: (id) => set({ selectedSceneRecommendationId: id }),
@@ -4271,6 +4370,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       applyLightingTemplate,
       applyMaterialCombo,
       applySceneRecommendation,
+      setSchemeSource,
     } = get();
     const collection = themeCollections.find((c) => c.id === id);
     if (!collection) return;
@@ -4307,6 +4407,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
     }
 
     updateThemeCollection(id, { useCount: collection.useCount + 1 });
+    setSchemeSource({
+      type: 'theme',
+      id: collection.id,
+      name: collection.name,
+      appliedAt: Date.now(),
+    });
+    get().showSuccessToast(`已应用主题：${collection.name}`);
   },
 
   addArtworksToThemeCollection: (collectionId, artworkIds) => {
@@ -5901,4 +6008,132 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   setStorageOperationResult: (result) => set({ storageOperationResult: result }),
   clearStorageOperationResult: () => set({ storageOperationResult: null }),
+
+  setSchemeSource: (source) => {
+    set({ schemeSource: source });
+    get().updateHomeState({ schemeSource: source });
+  },
+
+  addOperationFeedback: (feedback) => {
+    const id = `feedback-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const newFeedback: OperationFeedback = {
+      ...feedback,
+      id,
+      timestamp: Date.now(),
+    };
+    set((state) => ({
+      homeState: {
+        ...state.homeState,
+        pendingFeedbacks: [...state.homeState.pendingFeedbacks, newFeedback],
+      },
+    }));
+    return id;
+  },
+
+  removeOperationFeedback: (id) => {
+    set((state) => ({
+      homeState: {
+        ...state.homeState,
+        pendingFeedbacks: state.homeState.pendingFeedbacks.filter((f) => f.id !== id),
+      },
+    }));
+  },
+
+  clearOperationFeedbacks: () => {
+    set((state) => ({
+      homeState: {
+        ...state.homeState,
+        pendingFeedbacks: [],
+      },
+    }));
+  },
+
+  updateHomeState: (updates) => {
+    set((state) => ({
+      homeState: {
+        ...state.homeState,
+        ...updates,
+      },
+    }));
+  },
+
+  markCurrentDirty: (fields) => {
+    const { currentSchemeId } = get();
+    if (currentSchemeId) {
+      get().markSchemeDirty(currentSchemeId);
+    }
+    set((state) => {
+      const newDirtyFields = fields
+        ? [...new Set([...state.homeState.dirtyFields, ...fields])]
+        : [...state.homeState.dirtyFields];
+      return {
+        homeState: {
+          ...state.homeState,
+          isDirty: true,
+          dirtyFields: newDirtyFields,
+        },
+      };
+    });
+  },
+
+  clearCurrentDirty: () => {
+    const { currentSchemeId } = get();
+    if (currentSchemeId) {
+      get().clearSchemeDirty(currentSchemeId);
+    }
+    set((state) => ({
+      homeState: {
+        ...state.homeState,
+        isDirty: false,
+        dirtyFields: [],
+        lastSavedAt: Date.now(),
+      },
+    }));
+  },
+
+  getCurrentArtwork: () => {
+    const { selectedArtworkId, artworks } = get();
+    const artwork = selectedArtworkId ? artworks.find((a) => a.id === selectedArtworkId) || null : null;
+    get().updateHomeState({ currentArtwork: artwork });
+    return artwork;
+  },
+
+  getCurrentScheme: () => {
+    const { currentSchemeId, gallerySchemes } = get();
+    const scheme = currentSchemeId ? gallerySchemes.find((s) => s.id === currentSchemeId) || null : null;
+    get().updateHomeState({ currentScheme: scheme });
+    return scheme;
+  },
+
+  getCurrentProject: () => {
+    const { currentProjectId, curatorProjects } = get();
+    const project = currentProjectId ? curatorProjects.find((p) => p.id === currentProjectId) || null : null;
+    get().updateHomeState({ currentProject: project });
+    return project;
+  },
+
+  showToast: (type, message, duration) => {
+    get().addOperationFeedback({
+      type,
+      title: message,
+      message,
+      duration,
+    });
+  },
+
+  showSuccessToast: (message, duration) => {
+    get().showToast('success', message, duration);
+  },
+
+  showErrorToast: (message, duration) => {
+    get().showToast('error', message, duration);
+  },
+
+  showWarningToast: (message, duration) => {
+    get().showToast('warning', message, duration);
+  },
+
+  showInfoToast: (message, duration) => {
+    get().showToast('info', message, duration);
+  },
 }));
