@@ -17,6 +17,8 @@ import {
   LayoutGrid,
   Download,
   CircleDot,
+  Folder,
+  FileText,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import {
@@ -42,41 +44,39 @@ const dirtyFieldLabels: Record<string, string> = {
   lighting: '灯光配置',
   material: '材质配置',
   artworks: '作品选择',
+  scheme: '方案切换',
+  project: '项目切换',
 };
 
 export default function Home() {
   const {
-    selectedArtworkId,
     artworks,
     lighting,
     material,
     homeState,
     getCurrentArtwork,
+    getCurrentScheme,
+    getCurrentProject,
     clearCurrentDirty,
     resetLighting,
     resetMaterial,
-    showSuccessToast,
-    showInfoToast,
   } = useAppStore();
 
-  const currentArtwork = artworks.find((a) => a.id === selectedArtworkId) || null;
-  const { schemeSource, isDirty, dirtyFields, lastSavedAt } = homeState;
+  const { currentArtwork, currentScheme, currentProject, schemeSource, isDirty, dirtyFields, lastSavedAt } = homeState;
 
   useEffect(() => {
-    if (selectedArtworkId) {
-      getCurrentArtwork();
-    }
-  }, [selectedArtworkId, getCurrentArtwork]);
+    getCurrentArtwork();
+    getCurrentScheme();
+    getCurrentProject();
+  }, [getCurrentArtwork, getCurrentScheme, getCurrentProject]);
 
   const handleSave = () => {
     clearCurrentDirty();
-    showSuccessToast('方案已保存');
   };
 
   const handleReset = () => {
     resetLighting();
     resetMaterial();
-    showInfoToast('已重置为默认配置');
   };
 
   const formatTime = (timestamp: number | null) => {
@@ -277,6 +277,62 @@ export default function Home() {
             transition={{ delay: 0.2 }}
             className="space-y-6"
           >
+            {currentProject && (
+              <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg overflow-hidden border border-slate-200 dark:border-slate-700">
+                <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center gap-3">
+                  <div className="w-9 h-9 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl flex items-center justify-center">
+                    <Folder className="w-4.5 h-4.5 text-indigo-600 dark:text-indigo-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-slate-800 dark:text-slate-100">
+                      当前项目
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {currentProject.status || '进行中'}
+                    </p>
+                  </div>
+                </div>
+                <div className="p-4">
+                  <p className="font-medium text-slate-800 dark:text-slate-100 truncate">
+                    {currentProject.name}
+                  </p>
+                  {currentProject.description && (
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
+                      {currentProject.description}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {currentScheme && (
+              <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg overflow-hidden border border-slate-200 dark:border-slate-700">
+                <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center gap-3">
+                  <div className="w-9 h-9 bg-cyan-100 dark:bg-cyan-900/30 rounded-xl flex items-center justify-center">
+                    <FileText className="w-4.5 h-4.5 text-cyan-600 dark:text-cyan-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-slate-800 dark:text-slate-100">
+                      当前方案
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {currentScheme.wallArtworks?.length || 0} 件作品
+                    </p>
+                  </div>
+                </div>
+                <div className="p-4">
+                  <p className="font-medium text-slate-800 dark:text-slate-100 truncate">
+                    {currentScheme.name}
+                  </p>
+                  {currentScheme.description && (
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
+                      {currentScheme.description}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg overflow-hidden border border-slate-200 dark:border-slate-700">
               <div className="p-4 border-b border-slate-200 dark:border-slate-700">
                 <h3 className="font-semibold text-slate-800 dark:text-slate-100">

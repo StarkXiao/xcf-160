@@ -758,8 +758,25 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   setSelectedArtwork: (id) => {
-    set({ selectedArtworkId: id });
-    if (id) saveLastArtwork(id);
+    set((state) => {
+      const artwork = id ? state.artworks.find((a) => a.id === id) || null : null;
+      return {
+        selectedArtworkId: id,
+        homeState: {
+          ...state.homeState,
+          currentArtwork: artwork,
+          isDirty: true,
+          dirtyFields: [...new Set([...state.homeState.dirtyFields, 'artworks'])],
+        },
+      };
+    });
+    if (id) {
+      saveLastArtwork(id);
+      const artwork = get().artworks.find((a) => a.id === id);
+      if (artwork) {
+        get().showSuccessToast(`已选择作品：${artwork.title}`);
+      }
+    }
   },
 
   setLighting: (lighting, skipHistory = false, sourceInfo?: { type: SchemeSourceType; id: string; name: string }) => {
@@ -857,11 +874,26 @@ export const useAppStore = create<AppStore>((set, get) => ({
       const newIndex = state.lightingHistoryIndex - 1;
       const record = state.lightingHistory[newIndex];
       saveLastLighting(record.lighting);
+      const newSchemeSource = {
+        type: 'user' as SchemeSourceType,
+        id: 'user',
+        name: '用户自定义',
+        appliedAt: Date.now(),
+      };
+      const newDirtyFields = [...new Set([...state.homeState.dirtyFields, 'lighting'])];
       return {
         lighting: { ...record.lighting },
         lightingHistoryIndex: newIndex,
+        schemeSource: newSchemeSource,
+        homeState: {
+          ...state.homeState,
+          schemeSource: newSchemeSource,
+          isDirty: true,
+          dirtyFields: newDirtyFields,
+        },
       };
     });
+    get().showInfoToast('已撤销灯光配置');
   },
 
   redoLighting: () => {
@@ -870,11 +902,26 @@ export const useAppStore = create<AppStore>((set, get) => ({
       const newIndex = state.lightingHistoryIndex + 1;
       const record = state.lightingHistory[newIndex];
       saveLastLighting(record.lighting);
+      const newSchemeSource = {
+        type: 'user' as SchemeSourceType,
+        id: 'user',
+        name: '用户自定义',
+        appliedAt: Date.now(),
+      };
+      const newDirtyFields = [...new Set([...state.homeState.dirtyFields, 'lighting'])];
       return {
         lighting: { ...record.lighting },
         lightingHistoryIndex: newIndex,
+        schemeSource: newSchemeSource,
+        homeState: {
+          ...state.homeState,
+          schemeSource: newSchemeSource,
+          isDirty: true,
+          dirtyFields: newDirtyFields,
+        },
       };
     });
+    get().showInfoToast('已重做灯光配置');
   },
 
   clearLightingHistory: () => {
@@ -1559,13 +1606,51 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   resetLighting: () => {
-    set({ lighting: { ...DEFAULT_LIGHTING } });
+    set((state) => {
+      const newSchemeSource = {
+        type: 'user' as SchemeSourceType,
+        id: 'user',
+        name: '用户自定义',
+        appliedAt: Date.now(),
+      };
+      const newDirtyFields = state.homeState.dirtyFields.filter((f) => f !== 'lighting');
+      return {
+        lighting: { ...DEFAULT_LIGHTING },
+        schemeSource: newSchemeSource,
+        homeState: {
+          ...state.homeState,
+          schemeSource: newSchemeSource,
+          dirtyFields: newDirtyFields,
+          isDirty: newDirtyFields.length > 0,
+        },
+      };
+    });
     saveLastLighting(DEFAULT_LIGHTING);
+    get().showInfoToast('灯光配置已重置为默认值');
   },
 
   resetMaterial: () => {
-    set({ material: { ...DEFAULT_MATERIAL } });
+    set((state) => {
+      const newSchemeSource = {
+        type: 'user' as SchemeSourceType,
+        id: 'user',
+        name: '用户自定义',
+        appliedAt: Date.now(),
+      };
+      const newDirtyFields = state.homeState.dirtyFields.filter((f) => f !== 'material');
+      return {
+        material: { ...DEFAULT_MATERIAL },
+        schemeSource: newSchemeSource,
+        homeState: {
+          ...state.homeState,
+          schemeSource: newSchemeSource,
+          dirtyFields: newDirtyFields,
+          isDirty: newDirtyFields.length > 0,
+        },
+      };
+    });
     saveLastMaterial(DEFAULT_MATERIAL);
+    get().showInfoToast('材质配置已重置为默认值');
   },
 
   createScheme: (name, description) => {
@@ -1607,8 +1692,26 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   setCurrentScheme: (id) => {
-    set({ currentSchemeId: id, selectedWallArtworkIds: [] });
-    if (id) saveCurrentSchemeId(id);
+    set((state) => {
+      const scheme = id ? state.gallerySchemes.find((s) => s.id === id) || null : null;
+      return {
+        currentSchemeId: id,
+        selectedWallArtworkIds: [],
+        homeState: {
+          ...state.homeState,
+          currentScheme: scheme,
+          isDirty: true,
+          dirtyFields: [...new Set([...state.homeState.dirtyFields, 'scheme'])],
+        },
+      };
+    });
+    if (id) {
+      saveCurrentSchemeId(id);
+      const scheme = get().gallerySchemes.find((s) => s.id === id);
+      if (scheme) {
+        get().showSuccessToast(`已切换到方案：${scheme.name}`);
+      }
+    }
   },
 
   updateScheme: (id, updates) => {
@@ -2059,15 +2162,29 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   setCurrentProject: (id) => {
     set((state) => {
-      const project = state.curatorProjects.find((p) => p.id === id);
+      const project = state.curatorProjects.find((p) => p.id === id) || null;
       const newSchemeId = project?.currentSchemeId || state.currentSchemeId;
+      const scheme = newSchemeId ? state.gallerySchemes.find((s) => s.id === newSchemeId) || null : null;
       return {
         currentProjectId: id,
         currentSchemeId: newSchemeId,
         selectedWallArtworkIds: [],
+        homeState: {
+          ...state.homeState,
+          currentProject: project,
+          currentScheme: scheme,
+          isDirty: true,
+          dirtyFields: [...new Set([...state.homeState.dirtyFields, 'project'])],
+        },
       };
     });
-    if (id) saveCurrentProjectId(id);
+    if (id) {
+      saveCurrentProjectId(id);
+      const project = get().curatorProjects.find((p) => p.id === id);
+      if (project) {
+        get().showSuccessToast(`已切换到项目：${project.name}`);
+      }
+    }
   },
 
   updateProject: (id, updates) => {
@@ -6089,6 +6206,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         lastSavedAt: Date.now(),
       },
     }));
+    get().showSuccessToast('方案已保存');
   },
 
   getCurrentArtwork: () => {
