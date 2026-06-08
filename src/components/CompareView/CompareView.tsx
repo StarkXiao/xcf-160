@@ -142,9 +142,10 @@ export const CompareView: React.FC = () => {
   };
 
   const handleApplyPreset = (preset: Preset) => {
+    setPendingPreset(preset);
+
     if (currentSchemeId && isSchemeDirty(currentSchemeId)) {
       const result = checkCurrentSchemeDirty();
-      setPendingPreset(preset);
       setConfirmDialog({
         action: 'apply_template',
         title: '未保存的更改',
@@ -193,12 +194,37 @@ export const CompareView: React.FC = () => {
         },
       });
     } else {
-      loadPreset(preset);
-      if (currentSchemeId) {
-        saveSchemeDirtySnapshot(currentSchemeId);
-      }
-      setActivePanel('lighting');
-      addToast('success', `已应用方案"${preset.name}"`);
+      setConfirmDialog({
+        action: 'apply_template',
+        title: '确认应用方案',
+        message: (
+          <div>
+            <p className="mb-2">确定要应用方案"{preset.name}"吗？</p>
+            <p className="text-xs text-white/50">应用后当前方案的灯光和材质设置将被覆盖。</p>
+          </div>
+        ),
+        confirmText: '确认应用',
+        cancelText: '取消',
+        confirmType: 'primary',
+        onConfirm: () => {
+          loadPreset(preset);
+          if (currentSchemeId) {
+            saveSchemeDirtySnapshot(currentSchemeId);
+          }
+          setActivePanel('lighting');
+          setConfirmDialog(null);
+          setPendingPreset(null);
+          addToast('success', `已应用方案"${preset.name}"`);
+        },
+        onCancel: () => {
+          setConfirmDialog(null);
+          setPendingPreset(null);
+        },
+        onClose: () => {
+          setConfirmDialog(null);
+          setPendingPreset(null);
+        },
+      });
     }
   };
 
