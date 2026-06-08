@@ -24,6 +24,8 @@ import {
 import { useAppStore } from '../../store/useAppStore';
 import { GalleryPreview } from '../GalleryPreview/GalleryPreview';
 import { kelvinToHex } from '../../utils/color';
+import ConfirmDialog from '../ConfirmDialog';
+import { useToast } from '../Toast/ToastContext';
 import {
   LIGHT_TYPE_LABELS,
   FRAME_MATERIAL_LABELS,
@@ -32,6 +34,8 @@ import {
   type CompareParameterKey,
   type Preset,
   type BatchOperationType,
+  type ConfirmDialogConfig,
+  type GalleryScheme,
 } from '../../types';
 import { formatParameterValue } from '../../utils/compare';
 import { cn } from '../../lib/utils';
@@ -59,7 +63,17 @@ export const CompareView: React.FC = () => {
     executeBatchOperation,
     batchCopyFrom,
     batchResetToDefault,
+    gallerySchemes,
+    currentSchemeId,
+    isSchemeDirty,
+    checkCurrentSchemeDirty,
+    saveCurrentSchemeDraft,
+    clearSchemeDirty,
+    discardSchemeChanges,
+    saveSchemeDirtySnapshot,
   } = useAppStore();
+
+  const { addToast } = useToast();
 
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     lighting: true,
@@ -69,6 +83,13 @@ export const CompareView: React.FC = () => {
   const [batchOperationType, setBatchOperationType] = useState<BatchOperationType>('copyFrom');
   const [batchSourcePresetId, setBatchSourcePresetId] = useState<string>('');
   const [batchParameterKey, setBatchParameterKey] = useState<CompareParameterKey | 'all'>('all');
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogConfig | null>(null);
+  const [pendingPreset, setPendingPreset] = useState<Preset | null>(null);
+
+  const currentScheme = useMemo(
+    () => gallerySchemes.find((s) => s.id === currentSchemeId),
+    [gallerySchemes, currentSchemeId]
+  );
 
   const comparePresets = useMemo(
     () => presets.filter((p) => compareList.includes(p.id)),
@@ -118,6 +139,67 @@ export const CompareView: React.FC = () => {
     value: unknown
   ) => {
     setParameterValue(presetId, key, value);
+  };
+
+  const handleApplyPreset = (preset: Preset) => {
+    if (currentSchemeId && isSchemeDirty(currentSchemeId)) {
+      const result = checkCurrentSchemeDirty();
+      setPendingPreset(preset);
+      setConfirmDialog({
+        action: 'apply_template',
+        title: '未保存的更改',
+        message: (
+          <div>
+            <p className="mb-3">方案"{currentScheme?.name || '当前方案'}"有未保存的更改：</p>
+            <ul className="text-xs text-white/60 space-y-1 mb-3">
+              {result.changedFields.slice(0, 5).map((field) => (
+                <li key={field} className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 bg-amber-400 rounded-full" />
+                  {field}
+                </li>
+              ))}
+              {result.changedFields.length > 5 && (
+                <li className="text-white/40">还有 {result.changedFields.length - 5} 项更改...</li>
+              )}
+            </ul>
+            <p className="text-xs text-white/50">应用新方案"{preset.name}"将覆盖当前设置。您想如何处理？</p>
+          </div>
+        ),
+        confirmText: '保存并应用',
+        cancelText: '放弃更改',
+        confirmType: 'primary',
+        onConfirm: () => {
+          saveCurrentSchemeDraft(false);
+          clearSchemeDirty(currentSchemeId);
+          loadPreset(preset);
+          saveSchemeDirtySnapshot(currentSchemeId);
+          setActivePanel('lighting');
+          setConfirmDialog(null);
+          setPendingPreset(null);
+          addToast('success', '已保存当前方案并应用新方案');
+        },
+        onCancel: () => {
+          discardSchemeChanges(currentSchemeId);
+          loadPreset(preset);
+          saveSchemeDirtySnapshot(currentSchemeId);
+          setActivePanel('lighting');
+          setConfirmDialog(null);
+          setPendingPreset(null);
+          addToast('info', '已放弃当前更改并应用新方案');
+        },
+        onClose: () => {
+          setConfirmDialog(null);
+          setPendingPreset(null);
+        },
+      });
+    } else {
+      loadPreset(preset);
+      if (currentSchemeId) {
+        saveSchemeDirtySnapshot(currentSchemeId);
+      }
+      setActivePanel('lighting');
+      addToast('success', `已应用方案"${preset.name}"`);
+    }
   };
 
   const handleBatchExecute = () => {
@@ -375,10 +457,7 @@ export const CompareView: React.FC = () => {
             <div>亮度 {Math.round(preset.lighting.intensity * 100)}%</div>
           </div>
           <button
-            onClick={() => {
-              loadPreset(preset);
-              setActivePanel('lighting');
-            }}
+            onClick={() => handleApplyPreset(preset)}
             className="w-full mt-3 btn-secondary text-xs py-1.5 flex items-center justify-center gap-1"
           >
             <Play className="w-3 h-3" />
@@ -871,6 +950,17 @@ export const CompareView: React.FC = () => {
           已达到最大对比数量（4个）
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={confirmDialog !== null}
+        title={confirmDialog?.title || ''}
+        message={confirmDialog?.message || ''}
+        confirmText={confirmDialog?.confirmText}
+        cancelText={confirmDialog?.cancelText}
+        confirmType={confirmDialog?.confirmType}
+        onConfirm={confirmDialog?.onConfirm || (() => {})}
+        onCancel={confirmDialog?.onCancel || (() => {})}
+      />
     </motion.div>
   );
 };

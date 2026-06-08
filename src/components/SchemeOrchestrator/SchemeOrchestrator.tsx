@@ -179,13 +179,17 @@ export const SchemeOrchestrator: React.FC = () => {
         onConfirm: () => {
           saveCurrentSchemeDraft(false);
           clearSchemeDirty(currentSchemeId);
+          saveSchemeDirtySnapshot(currentSchemeId);
           setCurrentScheme(schemeId);
+          saveSchemeDirtySnapshot(schemeId);
           setConfirmDialog(null);
           addToast('success', '已保存草稿');
         },
         onCancel: () => {
           discardSchemeChanges(currentSchemeId);
+          saveSchemeDirtySnapshot(currentSchemeId);
           setCurrentScheme(schemeId);
+          saveSchemeDirtySnapshot(schemeId);
           setConfirmDialog(null);
           addToast('info', '已放弃更改');
         },
@@ -193,6 +197,7 @@ export const SchemeOrchestrator: React.FC = () => {
       });
     } else {
       setCurrentScheme(schemeId);
+      saveSchemeDirtySnapshot(schemeId);
     }
     setShowSchemeDropdown(false);
   };
@@ -201,6 +206,7 @@ export const SchemeOrchestrator: React.FC = () => {
     if (!currentSchemeId) return;
     saveCurrentSchemeDraft(false);
     clearSchemeDirty(currentSchemeId);
+    saveSchemeDirtySnapshot(currentSchemeId);
     setLastSavedAt(Date.now());
     addToast('success', '方案已保存');
   };
@@ -217,6 +223,7 @@ export const SchemeOrchestrator: React.FC = () => {
       confirmType: 'danger',
       onConfirm: () => {
         discardSchemeChanges(currentSchemeId);
+        saveSchemeDirtySnapshot(currentSchemeId);
         setConfirmDialog(null);
         addToast('info', '已放弃更改');
       },
@@ -259,10 +266,12 @@ export const SchemeOrchestrator: React.FC = () => {
         addToast('success', '已恢复上次编辑');
       },
       onCancel: () => {
+        saveSchemeDirtySnapshot(showDraftRestoreDialog);
         setShowDraftRestoreDialog(null);
         setConfirmDialog(null);
       },
       onClose: () => {
+        saveSchemeDirtySnapshot(showDraftRestoreDialog);
         setShowDraftRestoreDialog(null);
         setConfirmDialog(null);
       },
